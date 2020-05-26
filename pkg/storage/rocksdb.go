@@ -3508,8 +3508,22 @@ func (r *RocksDB) Rename(oldname, newname string) error {
 	return statusToError(C.DBEnvRenameFile(r.rdb, goToCSlice([]byte(oldname)), goToCSlice([]byte(newname))))
 }
 
+// Stat implements the FS interface.
+func (r *RocksDB) Stat(name string) (os.FileInfo, error) {
+	// The RocksDB env doesn't expose a Stat equivalent. This is temporary
+	// until the storage.FS interface can become a superset of the
+	// pebble/vfs.FS interface.
+	return os.Stat(name)
+}
+
 // MkdirAll implements the FS interface.
 func (r *RocksDB) MkdirAll(name string) error {
+	// DBEnvCreateDir doesn't create all the parents, but the FS interface
+	// exposes MkdirAll with the expectation that it will create parents.
+	// Create name's parents transparently to adhere to the interface.
+	if err := os.MkdirAll(filepath.Dir(name), os.ModePerm); err != nil {
+		return err
+	}
 	return statusToError(C.DBEnvCreateDir(r.rdb, goToCSlice([]byte(name))))
 }
 

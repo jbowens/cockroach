@@ -14,7 +14,6 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -57,7 +56,7 @@ func (r *Replica) setCorruptRaftMuLocked(
 	r.mu.destroyStatus.Set(cErr, destroyReasonRemoved)
 
 	auxDir := r.store.engine.GetAuxiliaryDir()
-	_ = os.MkdirAll(auxDir, 0755)
+	_ = r.store.engine.MkdirAll(auxDir)
 	path := base.PreventedStartupFile(auxDir)
 
 	preventStartupMsg := fmt.Sprintf(`ATTENTION:

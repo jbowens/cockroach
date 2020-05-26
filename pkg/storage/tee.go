@@ -543,6 +543,20 @@ func (t *TeeEngine) Rename(oldname, newname string) error {
 	return fatalOnErrorMismatch(t.ctx, err, err2)
 }
 
+// Stat implements the FS interface.
+func (t *TeeEngine) Stat(name string) (os.FileInfo, error) {
+	info1, err := t.eng1.Stat(name)
+	name2, ok := t.remapPath(name)
+	if !ok {
+		return info1, err
+	}
+	_, err2 := t.eng2.Stat(name2)
+	if err := fatalOnErrorMismatch(t.ctx, err, err2); err != nil {
+		return nil, err
+	}
+	return info1, err
+}
+
 // MkdirAll implements the FS interface.
 func (t *TeeEngine) MkdirAll(name string) error {
 	err := t.eng1.MkdirAll(name)

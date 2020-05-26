@@ -1063,6 +1063,11 @@ func (p *Pebble) List(name string) ([]string, error) {
 	return p.fs.List(name)
 }
 
+// Stat implements the FS interface.
+func (p *Pebble) Stat(name string) (os.FileInfo, error) {
+	return p.fs.Stat(name)
+}
+
 // CreateCheckpoint implements the Engine interface.
 func (p *Pebble) CreateCheckpoint(dir string) error {
 	return p.db.Checkpoint(dir)

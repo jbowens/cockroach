@@ -12,7 +12,6 @@ package kvserver_test
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -111,10 +110,17 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 		if dir == "" {
 			t.Fatal("no sideloaded directory")
 		}
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := mtc.engines[1].MkdirAll(dir); err != nil {
 			t.Fatal(err)
 		}
-		if err := ioutil.WriteFile(filepath.Join(dir, "i1000000.t100000"), []byte("foo"), 0644); err != nil {
+		f, err := mtc.engines[1].Create(filepath.Join(dir, "i1000000.t100000"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.Write([]byte("foo")); err != nil {
+			t.Fatal(err)
+		}
+		if err := f.Close(); err != nil {
 			t.Fatal(err)
 		}
 
@@ -125,8 +131,7 @@ func TestReplicaGCQueueDropReplicaDirect(t *testing.T) {
 					repl1.RaftLock()
 					dir := repl1.SideloadedRaftMuLocked().Dir()
 					repl1.RaftUnlock()
-					_, err := os.Stat(dir)
-
+					_, err := mtc.engines[1].List(dir)
 					if os.IsNotExist(err) {
 						return nil
 					}

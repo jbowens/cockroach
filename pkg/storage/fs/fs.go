@@ -10,7 +10,10 @@
 
 package fs
 
-import "io"
+import (
+	"io"
+	"os"
+)
 
 // File and FS are a partial attempt at offering the Pebble vfs.FS interface. Given the constraints
 // of the RocksDB Env interface we've chosen to only include what is easy to implement. Additionally,
@@ -51,6 +54,9 @@ type FS interface {
 	// Rename renames a file. It overwrites the file at newname if one exists,
 	// the same as os.Rename.
 	Rename(oldname, newname string) error
+
+	// Stat returns an os.FileInfo describing the named file.
+	Stat(name string) (os.FileInfo, error)
 
 	// MkdirAll creates the named dir and its parents. Does nothing if the
 	// directory already exists.

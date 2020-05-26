@@ -40,7 +40,7 @@ func TestSSTSnapshotStorage(t *testing.T) {
 	scratch := sstSnapshotStorage.NewScratchSpace(testRangeID, testSnapUUID)
 
 	// Check that the storage lazily creates the directories on first write.
-	_, err := os.Stat(scratch.snapDir)
+	_, err := eng.Stat(scratch.snapDir)
 	if !os.IsNotExist(err) {
 		t.Fatalf("expected %s to not exist", scratch.snapDir)
 	}
@@ -56,7 +56,7 @@ func TestSSTSnapshotStorage(t *testing.T) {
 
 	// Check that the storage lazily creates the files on write.
 	for _, fileName := range scratch.SSTs() {
-		_, err := os.Stat(fileName)
+		_, err := eng.Stat(fileName)
 		if !os.IsNotExist(err) {
 			t.Fatalf("expected %s to not exist", fileName)
 		}
@@ -90,12 +90,12 @@ func TestSSTSnapshotStorage(t *testing.T) {
 
 	// Check that Clear removes the directory.
 	require.NoError(t, scratch.Clear())
-	_, err = os.Stat(scratch.snapDir)
+	_, err = eng.Stat(scratch.snapDir)
 	if !os.IsNotExist(err) {
 		t.Fatalf("expected %s to not exist", scratch.snapDir)
 	}
 	require.NoError(t, sstSnapshotStorage.Clear())
-	_, err = os.Stat(sstSnapshotStorage.dir)
+	_, err = eng.Stat(sstSnapshotStorage.dir)
 	if !os.IsNotExist(err) {
 		t.Fatalf("expected %s to not exist", sstSnapshotStorage.dir)
 	}
