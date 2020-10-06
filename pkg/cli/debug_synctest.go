@@ -11,15 +11,18 @@
 package cli
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"math/rand"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -31,7 +34,7 @@ import (
 )
 
 var debugSyncTestCmd = &cobra.Command{
-	Use:   "synctest <empty-dir> <nemesis-script>",
+	Use:   "synctest <empty-dir> <nemesis-script> [generation] [expSeq]",
 	Short: "Run a log-like workload that can help expose filesystem anomalies",
 	Long: `
 synctest is a tool to verify filesystem consistency in the presence of I/O errors.
@@ -49,7 +52,7 @@ written data is reopened, checked for data loss, new data is written, and
 the nemesis turned back on. In the absence of unexpected error or user interrupt,
 this process continues indefinitely.
 `,
-	Args: cobra.ExactArgs(2),
+	Args: cobra.RangeArgs(2, 4),
 	RunE: runDebugSyncTest,
 }
 
@@ -72,6 +75,18 @@ func (sn scriptNemesis) Off() error {
 	return sn.exec("off")
 }
 
+type stdoutNemesis struct{}
+
+func (sn stdoutNemesis) On() error {
+	_, err := fmt.Println("on")
+	return err
+}
+
+func (sn stdoutNemesis) Off() error {
+	_, err := fmt.Println("off")
+	return err
+}
+
 func runDebugSyncTest(cmd *cobra.Command, args []string) error {
 	// TODO(tschottdorf): make this a flag.
 	duration := 10 * time.Minute
@@ -79,30 +94,117 @@ func runDebugSyncTest(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), duration)
 	defer cancel()
 
+	// Some Pebble errors during MANIFEST and WAL writes/syncs are considered
+	// fatal and leave the *pebble.DB in an undefined state if the fatal is
+	// recovered. To work around this, we open the DB and run tests from
+	// within a subprocess. If a FATAL is encountered, the subprocess exits
+	// and a new subprocess is created, opening the same database. If there
+	// are more than two arguments in the argument list, this process is a
+	// subprocess and we should run the tests against the provided generation
+	// directory with the provided expected sequence number.
+	if len(args) > 2 {
+		generation := args[2]
+		dir := filepath.Join(args[0], generation)
+		expSeq, err := strconv.ParseInt(args[3], 10, 64)
+		if err != nil {
+			return err
+		}
+		return runSyncer(ctx, dir, expSeq, stdoutNemesis{})
+	}
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, drainSignals...)
+
 	nem := scriptNemesis(args[1])
 	if err := nem.Off(); err != nil {
 		return errors.Wrap(err, "unable to disable nemesis at beginning of run")
 	}
-
 	var generation int
 	var lastSeq int64
 	for {
-		dir := filepath.Join(args[0], strconv.Itoa(generation))
-		curLastSeq, err := runSyncer(ctx, dir, lastSeq, nem)
+		ch, err := execGeneration(ctx, generation, lastSeq, nem)
 		if err != nil {
 			return err
 		}
-		lastSeq = curLastSeq
-		if curLastSeq == 0 {
-			if ctx.Err() != nil {
+		done := false
+		for !done {
+			select {
+			case sig := <-sigCh:
+				return errors.Errorf("interrupted (%v)", sig)
+			case <-ctx.Done():
 				// Clean shutdown.
 				return nil
+			case msg := <-ch:
+				if msg.err != nil {
+					return msg.err
+				}
+				switch msg.command {
+				case "on":
+					if err := nem.On(); err != nil {
+						return err
+					}
+				case "off":
+					if err := nem.Off(); err != nil {
+						return err
+					}
+				case "done":
+					done = true
+					break
+				default:
+					seq, err := strconv.ParseInt(msg.command, 10, 64)
+					if err != nil {
+						return err
+					}
+					lastSeq = seq
+				}
 			}
-			// RocksDB dir got corrupted.
-			generation++
-			continue
 		}
 	}
+}
+
+type subprocessMsg struct {
+	command string
+	err     error
+}
+
+func execGeneration(
+	ctx context.Context, generation int, lastSeq int64, nem nemesisI,
+) (chan subprocessMsg, error) {
+	var args []string
+	args = append(args, os.Args...)
+	args = append(args, strconv.Itoa(generation))
+	args = append(args, strconv.FormatInt(lastSeq, 10))
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+
+	var stderrBuf bytes.Buffer
+	cmd.Stderr = &stderrBuf
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	ch := make(chan subprocessMsg)
+	go func() {
+		// The subprocess provides nemesis instructions through stdout, which we
+		// forward to nem. It also reports current committed sequence numbers.
+		r := bufio.NewReader(stdout)
+		for {
+			s, err := r.ReadString('\n')
+			if err == io.EOF {
+				break
+			} else if err != nil {
+				ch <- subprocessMsg{err: err}
+			}
+			s = strings.TrimSpace(s)
+			ch <- subprocessMsg{command: s}
+		}
+		if err := cmd.Wait(); err != nil {
+			ch <- subprocessMsg{err: errors.WithDetailf(err, "standard error:\n%s", stderrBuf.String())}
+		}
+	}()
+	return ch, nil
 }
 
 type nemesisI interface {
@@ -110,20 +212,34 @@ type nemesisI interface {
 	Off() error
 }
 
-func runSyncer(
-	ctx context.Context, dir string, expSeq int64, nemesis nemesisI,
-) (lastSeq int64, _ error) {
+type fatalLogger struct{}
+
+func (l fatalLogger) Infof(string, ...interface{}) {}
+func (l fatalLogger) Fatalf(format string, args ...interface{}) {
+	// A FATAL error requires re-opening the database to recover.
+	err := errors.Errorf(format, args...)
+	fmt.Fprintf(stderr, "fatal error, exiting to reopen from a new process: %s\n", err)
+	fmt.Println("done")
+	os.Exit(0)
+}
+
+func runSyncer(ctx context.Context, dir string, expSeq int64, nemesis nemesisI) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
+	defer fmt.Println("done")
 
-	db, err := OpenEngine(dir, stopper, OpenEngineOptions{})
+	db, err := OpenEngine(dir, stopper, OpenEngineOptions{
+		// Intercept calls to Fatalf.
+		Logger: fatalLogger{},
+	})
 	if err != nil {
 		if expSeq == 0 {
 			// Failed on first open, before we tried to corrupt anything. Hard stop.
-			return 0, err
+			return err
 		}
-		fmt.Fprintln(stderr, "RocksDB directory", dir, "corrupted:", err)
-		return 0, nil // trigger reset
+		fmt.Fprintln(stderr, "Data directory directory", dir, "corrupted:", err)
+		// tktk: resolve this
+		return err
 	}
 
 	buf := make([]byte, 128)
@@ -145,12 +261,12 @@ func runSyncer(
 
 	fmt.Fprintf(stderr, "verifying existing sequence numbers...")
 	if err := db.Iterate(roachpb.KeyMin, roachpb.KeyMax, check); err != nil {
-		return 0, err
+		return err
 	}
 	// We must not lose writes, but sometimes we get extra ones (i.e. we caught an
 	// error but the write actually went through).
 	if expSeq != 0 && seq < expSeq {
-		return 0, errors.Errorf("highest persisted sequence number is %d, but expected at least %d", seq, expSeq)
+		return errors.Errorf("highest persisted sequence number is %d, but expected at least %d", seq, expSeq)
 	}
 	fmt.Fprintf(stderr, "done (seq=%d).\nWriting new entries:\n", seq)
 
@@ -218,7 +334,7 @@ func runSyncer(
 			for n := rand.Intn(3); n >= 0; n-- {
 				if n == 1 {
 					if err := nemesis.Off(); err != nil {
-						return 0, err
+						return err
 					}
 				}
 				fmt.Fprintf(stderr, "error after seq %d (trying %d additional writes): %v\n", lastSeq, n, err)
@@ -226,14 +342,19 @@ func runSyncer(
 			}
 			fmt.Fprintf(stderr, "error after seq %d: %v\n", lastSeq, err)
 			// Intentionally swallow the error to get into the next epoch.
-			return lastSeq, nil
+			return nil
 		}
+
 		select {
 		case sig := <-ch:
-			return seq, errors.Errorf("interrupted (%v)", sig)
+			return errors.Errorf("interrupted (%v)", sig)
 		case <-ctx.Done():
-			return 0, nil
+			return nil
 		default:
+			// otherwise, continue for another iteration
+			// Write the sequence number to stdout so that parent process
+			// knows to expect `seq` to be committed from now on.
+			fmt.Printf("%d\n", seq)
 		}
 	}
 }

@@ -502,9 +502,11 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 	// The context dance here is done so that we have a clean context without
 	// timeouts that has a copy of the log tags.
 	logCtx := logtags.WithTags(context.Background(), logtags.FromContext(ctx))
-	cfg.Opts.Logger = pebbleLogger{
-		ctx:   logCtx,
-		depth: 1,
+	if cfg.Opts.Logger == nil {
+		cfg.Opts.Logger = pebbleLogger{
+			ctx:   logCtx,
+			depth: 1,
+		}
 	}
 	cfg.Opts.EventListener = pebble.MakeLoggingEventListener(pebbleLogger{
 		ctx:   logCtx,

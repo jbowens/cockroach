@@ -113,6 +113,7 @@ func parseRangeID(arg string) (roachpb.RangeID, error) {
 type OpenEngineOptions struct {
 	ReadOnly  bool
 	MustExist bool
+	Logger    pebble.Logger
 }
 
 // OpenExistingStore opens the rocksdb engine rooted at 'dir'.
@@ -146,9 +147,11 @@ func OpenEngine(dir string, stopper *stop.Stopper, opts OpenEngineOptions) (stor
 	case enginepb.EngineTypeDefault:
 		fallthrough
 	case enginepb.EngineTypePebble:
+		pebbleOpts := storage.DefaultPebbleOptions()
+		pebbleOpts.Logger = opts.Logger
 		cfg := storage.PebbleConfig{
 			StorageConfig: storageConfig,
-			Opts:          storage.DefaultPebbleOptions(),
+			Opts:          pebbleOpts,
 		}
 		cfg.Opts.Cache = pebble.NewCache(server.DefaultCacheSize)
 		defer cfg.Opts.Cache.Unref()

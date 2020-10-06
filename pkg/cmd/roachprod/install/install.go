@@ -40,7 +40,7 @@ sudo service cassandra stop;
     sudo chmod 777 "${thrift_dir}"
     cd "${thrift_dir}"
     curl "https://downloads.apache.org/thrift/0.13.0/thrift-0.13.0.tar.gz" | sudo tar xvz --strip-components 1
-    sudo ./configure --prefix=/usr
+    sudo ./configure --prefix=/usr --with-nodejs=no
     sudo make -j$(nproc)
     sudo make install
     (cd "${thrift_dir}/lib/py" && sudo python setup.py install)
@@ -54,8 +54,7 @@ sudo service cassandra stop;
     sudo rm -rf "${charybde_dir}" "${nemesis_path}" /usr/local/bin/charybdefs{,-nemesis}
     sudo mkdir -p "${charybde_dir}"
     sudo chmod 777 "${charybde_dir}"
-    # TODO(bilal): Change URL back to scylladb/charybdefs once https://github.com/scylladb/charybdefs/pull/21 is merged.
-    git clone --depth 1 "https://github.com/itsbilal/charybdefs.git" "${charybde_dir}"
+    git clone --depth 1 "https://github.com/scylladb/charybdefs.git" "${charybde_dir}"
 
     cd "${charybde_dir}"
     thrift -r --gen cpp server.thrift

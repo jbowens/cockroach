@@ -15,6 +15,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 func registerSyncTest(r *testRegistry) {
@@ -28,9 +29,11 @@ fi
 `
 
 	r.Add(testSpec{
-		Skip:       "#48603: broken on Pebble",
-		Name:       "synctest",
-		Owner:      OwnerStorage,
+		Name:  "synctest",
+		Owner: OwnerStorage,
+		// The `cockroach debug synctest` command runs for 10 minutes, but
+		// installing charybdefs can take ~5 minutes.
+		Timeout:    20 * time.Minute,
 		MinVersion: "v19.1.0",
 		// This test sets up a custom file system; we don't want the cluster reused.
 		Cluster: makeClusterSpec(1, reuseNone()),
