@@ -214,7 +214,7 @@ func registerRestore(r *testRegistry) {
 		nodes   int
 		timeout time.Duration
 	}{
-		{10, 6 * time.Hour},
+		{10, 12 * time.Hour},
 		{32, 3 * time.Hour},
 	} {
 		r.Add(testSpec{
