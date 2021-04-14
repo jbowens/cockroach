@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 	"golang.org/x/time/rate"
 )
@@ -545,17 +546,16 @@ func addSSTablePreApply(
 	checksum := util.CRC32(sst.Data)
 
 	if checksum != sst.CRC32 {
-		log.Fatalf(
-			ctx,
-			"checksum for AddSSTable at index term %d, index %d does not match; at proposal time %x (%d), now %x (%d)",
-			term, index, sst.CRC32, sst.CRC32, checksum, checksum,
-		)
+		log.CrashWithCore(ctx,
+			errors.Errorf("checksum for AddSSTable at index term %d, index %d does not match; at proposal time %x (%d), now %x (%d)",
+				term, index, sst.CRC32, sst.CRC32, checksum, checksum))
 	}
 
 	path, err := sideloaded.Filename(ctx, index, term)
 	if err != nil {
 		log.Fatalf(ctx, "sideloaded SSTable at term %d, index %d is missing", term, index)
 	}
+	keepPath := fmt.Sprintf("%s.%x.keep", path, checksum)
 
 	eng.PreIngestDelay(ctx)
 
@@ -574,6 +574,10 @@ func addSSTablePreApply(
 		// copy of it.  We cannot pass it the path in the sideload store as
 		// the engine deletes the passed path on success.
 		if linkErr := eng.Link(path, ingestPath); linkErr == nil {
+			if linkErr2 := eng.Link(path, keepPath); linkErr2 != nil {
+				log.Fatalf(ctx, "while ingesting %s, linking keep file: %v", path, linkErr2)
+			}
+
 			ingestErr := eng.IngestExternalFiles(ctx, []string{ingestPath})
 			if ingestErr != nil {
 				log.Fatalf(ctx, "while ingesting %s: %v", ingestPath, ingestErr)
@@ -606,6 +610,10 @@ func addSSTablePreApply(
 			log.Fatalf(ctx, "while ingesting %s: %+v", path, err)
 		}
 		copied = true
+	}
+
+	if linkErr := eng.Link(path, keepPath); linkErr != nil {
+		log.Fatalf(ctx, "while linking keep file: %s: %+v", path, linkErr)
 	}
 
 	if err := eng.IngestExternalFiles(ctx, []string{path}); err != nil {
