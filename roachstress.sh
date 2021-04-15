@@ -3,11 +3,9 @@ set -euxo pipefail
 
 sha=$(git rev-parse HEAD)
 
-if [ ! -f roachtest.$sha ]; then
-	./build/builder.sh mkrelease amd64-linux-gnu bin/{roach{prod,test},workload}
-	mv -f bin.docker_amd64/roachprod roachprod.$sha
+if [ ! -f workload.$sha ]; then
+	./build/builder.sh mkrelease amd64-linux-gnu bin/workload
 	mv -f bin.docker_amd64/workload workload.$sha
-	mv -f bin.docker_amd64/roachtest roachtest.$sha
 fi
 
 if [ ! -f cockroach.$sha ]; then
@@ -18,4 +16,4 @@ fi
 
 export GCE_PROJECT=andrei-jepsen
 TEST=restore2TB/nodes=10
-time caffeinate -- ./roachtest.$sha run "${TEST}" --port 8080 --parallelism 100 --debug --count 800 --cpu-quota 1600 --roachprod roachprod.${sha} --workload workload.${sha} --cockroach ./cockroach.$sha --artifacts artifacts.$sha
+time caffeinate -- roachtest run "${TEST}" --port 8080 --user jackson --parallelism 100 --debug --count 800 --cpu-quota 1600 --workload workload.${sha} --cockroach ./cockroach.$sha --artifacts artifacts.$sha
