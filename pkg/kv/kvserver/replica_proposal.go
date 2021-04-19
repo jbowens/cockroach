@@ -555,7 +555,7 @@ func addSSTablePreApply(
 	if err != nil {
 		log.Fatalf(ctx, "sideloaded SSTable at term %d, index %d is missing", term, index)
 	}
-	keepPath := fmt.Sprintf("%s.%x.keep", path, checksum)
+	//keepPath := fmt.Sprintf("%s.%x.keep", path, checksum)
 
 	eng.PreIngestDelay(ctx)
 
@@ -574,9 +574,9 @@ func addSSTablePreApply(
 		// copy of it.  We cannot pass it the path in the sideload store as
 		// the engine deletes the passed path on success.
 		if linkErr := eng.Link(path, ingestPath); linkErr == nil {
-			if linkErr2 := eng.Link(path, keepPath); linkErr2 != nil {
-				log.Fatalf(ctx, "while ingesting %s, linking keep file: %v", path, linkErr2)
-			}
+			//if linkErr2 := eng.Link(path, keepPath); linkErr2 != nil {
+			//log.Fatalf(ctx, "while ingesting %s, linking keep file: %v", path, linkErr2)
+			//}
 
 			ingestErr := eng.IngestExternalFiles(ctx, []string{ingestPath})
 			if ingestErr != nil {
@@ -612,9 +612,9 @@ func addSSTablePreApply(
 		copied = true
 	}
 
-	if linkErr := eng.Link(path, keepPath); linkErr != nil {
-		log.Fatalf(ctx, "while linking keep file: %s: %+v", path, linkErr)
-	}
+	//if linkErr := eng.Link(path, keepPath); linkErr != nil {
+	//log.Fatalf(ctx, "while linking keep file: %s: %+v", path, linkErr)
+	//}
 
 	if err := eng.IngestExternalFiles(ctx, []string{path}); err != nil {
 		log.Fatalf(ctx, "while ingesting %s: %+v", path, err)
