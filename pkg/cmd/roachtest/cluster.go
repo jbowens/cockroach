@@ -2163,17 +2163,17 @@ func (c *cluster) StartE(ctx context.Context, opts ...option) error {
 	args = append(args, roachprodArgs(opts)...)
 	args = append(args, c.makeNodes(opts...))
 	if !argExists(args, "--encrypt") {
-		if c.encryptDefault {
-			args = append(args, "--encrypt")
-		} else if c.encryptAtRandom {
-			rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-			if rng.Intn(2) == 1 {
-				c.l.Printf("starting with encryption at rest enabled")
-				args = append(args, "--encrypt")
-				// Force encryption in future calls of Start with the same cluster.
-				c.encryptDefault = true
-			}
-		}
+		//if c.encryptDefault {
+		//args = append(args, "--encrypt")
+		//} else if c.encryptAtRandom {
+		//rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+		//if rng.Intn(2) == 1 {
+		//c.l.Printf("starting with encryption at rest enabled")
+		//args = append(args, "--encrypt")
+		//// Force encryption in future calls of Start with the same cluster.
+		//c.encryptDefault = true
+		//}
+		//}
 	}
 	return execCmd(ctx, c.l, args...)
 }
