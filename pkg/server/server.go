@@ -717,8 +717,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		circularJobRegistry:      jobRegistry,
 		jobAdoptionStopFile:      jobAdoptionStopFile,
 		protectedtsProvider:      protectedtsProvider,
-		rangeFeedFactory:         rangeFeedFactory,
 		sqlStatusServer:          sStatus,
+		rangeFeedFactory:         rangeFeedFactory,
+		outOfDisk:                node.oodMonitor.IsOODModeEnabled,
 	})
 	if err != nil {
 		return nil, err
@@ -1696,6 +1697,12 @@ func (s *Server) PreStart(ctx context.Context) error {
 	//   the hazard described in Node.start, around initializing additional
 	//   stores)
 	s.node.waitForAdditionalStoreInit()
+
+	// Begin monitioring all the node's stores for disk-space exhaustion, and
+	// establish automatic ballasts if they don't already exist.
+	if err := s.node.oodMonitor.start(ctx); err != nil {
+		return err
+	}
 
 	log.Ops.Infof(ctx, "starting %s server at %s (use: %s)",
 		redact.Safe(s.cfg.HTTPRequestScheme()), s.cfg.HTTPAddr, s.cfg.HTTPAdvertiseAddr)

@@ -915,6 +915,10 @@ type ExecutorConfig struct {
 	// CompactEngineSpanFunc is used to inform a storage engine of the need to
 	// perform compaction over a key span.
 	CompactEngineSpanFunc tree.CompactEngineSpanFunc
+
+	// IsDiskFull is used to reject SQL queries if the node or cluster is
+	// out of disk space.
+	IsDiskFull func() bool
 }
 
 // VersionUpgradeHook is used to run migrations starting in v21.1.
@@ -2229,6 +2233,10 @@ func (m *sessionDataMutator) SetApplicationName(appName string) {
 	m.data.ApplicationName = appName
 	m.notifyOnDataChangeListeners("application_name", appName)
 	m.paramStatusUpdater.BufferParamStatusUpdate("application_name", appName)
+}
+
+func (m *sessionDataMutator) SetIgnoreOutOfDiskMode(v bool) {
+	m.data.IgnoreOutOfDiskMode = v
 }
 
 func (m *sessionDataMutator) SetBytesEncodeFormat(val sessiondatapb.BytesEncodeFormat) {

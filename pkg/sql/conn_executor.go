@@ -1561,6 +1561,12 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 				return nil
 			}
 			ex.curStmtAST = tcmd.AST
+			if err := ex.checkFullDisk(); err != nil {
+				res = ex.clientComm.CreateErrorResult(pos)
+				ev = eventNonRetriableErr{IsCommit: fsm.False}
+				payload = eventNonRetriableErrPayload{err: err}
+				return nil
+			}
 
 			stmtRes := ex.clientComm.CreateStatementResult(
 				tcmd.AST,
@@ -1621,6 +1627,12 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 				log.VEventf(ctx, 2, "portal resolved to: %s", portal.Stmt.AST.String())
 			}
 			ex.curStmtAST = portal.Stmt.AST
+			if err := ex.checkFullDisk(); err != nil {
+				res = ex.clientComm.CreateErrorResult(pos)
+				ev = eventNonRetriableErr{IsCommit: fsm.False}
+				payload = eventNonRetriableErrPayload{err: err}
+				return nil
+			}
 
 			pinfo := &tree.PlaceholderInfo{
 				PlaceholderTypesInfo: tree.PlaceholderTypesInfo{
@@ -1794,6 +1806,19 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 		ex.server.cfg.TestingKnobs.AfterExecCmd(ctx, cmd, ex.stmtBuf)
 	}
 
+	return nil
+}
+
+func (ex *connExecutor) checkFullDisk() error {
+	// Reject the query immediately if the servicing node is out-of-disk
+	// space and the initial session vars don't specify that we should
+	// explicitly ignore that.
+	if ex.server.cfg.IsDiskFull() &&
+		ex.curStmtAST.StatementType() != tree.TypeTCL &&
+		ex.curStmtAST.StatementType() != tree.TypeDCL &&
+		!ex.sessionData.IgnoreOutOfDiskMode {
+		return pgerror.Newf(pgcode.DiskFull, "Out of disk space. (TODO: provide more details here.)")
+	}
 	return nil
 }
 

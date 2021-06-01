@@ -239,6 +239,9 @@ type sqlServerArgs struct {
 
 	// Used to watch settings and descriptor changes.
 	rangeFeedFactory *rangefeed.Factory
+
+	// Used to error SQL queries if the node is out-of-disk.
+	outOfDisk func() bool
 }
 
 func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
@@ -524,6 +527,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		RootMemoryMonitor:       rootSQLMemoryMonitor,
 		TestingKnobs:            sqlExecutorTestingKnobs,
 		CompactEngineSpanFunc:   compactEngineSpanFunc,
+		IsDiskFull:              cfg.outOfDisk,
 
 		DistSQLPlanner: sql.NewDistSQLPlanner(
 			ctx,

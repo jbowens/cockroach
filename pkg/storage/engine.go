@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/vfs"
 )
 
 // DefaultStorageEngine represents the default storage engine to use.
@@ -757,6 +758,10 @@ type Engine interface {
 	// which must not exist. The directory should be on the same file system so
 	// that hard links can be used.
 	CreateCheckpoint(dir string) error
+	// OnOutOfDisk registers a callback to be invoked when the underlying
+	// filesystem returns an error signifying the storage is out of disk
+	// space.
+	OnOutOfDisk(func(vfs.FS))
 
 	// IsSeparatedIntentsEnabledForTesting is a test only method used in tests
 	// that know that this enabled setting is not changing and need the value to

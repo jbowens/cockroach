@@ -59,6 +59,9 @@ message SessionData {
   // WorkMemLimit determines how much RAM (in bytes) a single operation of a
   // single query can use before it has to spill to disk.
   int64 WorkMemLimit = 12;
+  // IgnoreOutOfDiskMode indicates whether this session may execute queries
+  // even if the cluster or the servicing node has entered out-of-disk mode.
+  bool ignore_out_of_disk_mode = 13;
 }
 
 // DataConversionConfig contains the parameters that influence the conversion

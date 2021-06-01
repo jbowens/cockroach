@@ -628,6 +628,7 @@ func (ie *InternalExecutor) execInternal(
 	if sd.ApplicationName == "" {
 		sd.ApplicationName = catconstants.InternalAppNamePrefix + "-" + opName
 	}
+	sd.IgnoreOutOfDiskMode = true
 
 	// The returned span is finished by this function in all error paths, but if
 	// an iterator is returned, then we transfer the responsibility of closing

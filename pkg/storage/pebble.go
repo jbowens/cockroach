@@ -451,6 +451,12 @@ type Pebble struct {
 	fs     vfs.FS
 	logger pebble.Logger
 
+	// Out-of-disk handling
+	mu struct {
+		sync.Mutex
+		outOfDiskFns []func(fs vfs.FS)
+	}
+
 	wrappedIntentWriter intentDemuxWriter
 }
 
@@ -521,10 +527,27 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 		return nil, err
 	}
 
-	fileRegistry, statsHandler, err := ResolveEncryptedEnvOptions(&cfg)
-	if err != nil {
-		return nil, err
+	p := &Pebble{
+		path:     cfg.Dir,
+		auxDir:   auxDir,
+		maxSize:  cfg.MaxSize,
+		attrs:    cfg.Attrs,
+		settings: cfg.Settings,
 	}
+
+	// Wrap the virtual filesystem with an implementation that will invoke the
+	// provided closure when the operating system reports that we've exhausted
+	// available disk space.
+	cfg.Opts.FS = onOutOfDisk(cfg.Opts.FS, p.invokeOutOfDiskCallbacks(cfg.Opts.FS))
+
+	{
+		var err error
+		p.fileRegistry, p.statsHandler, err = ResolveEncryptedEnvOptions(&cfg)
+		if err != nil {
+			return nil, err
+		}
+	}
+	p.fs = cfg.Opts.FS
 
 	// The context dance here is done so that we have a clean context without
 	// timeouts that has a copy of the log tags.
@@ -538,17 +561,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 		ctx:   logCtx,
 		depth: 2, // skip over the EventListener stack frame
 	})
-	p := &Pebble{
-		path:         cfg.Dir,
-		auxDir:       auxDir,
-		maxSize:      cfg.MaxSize,
-		attrs:        cfg.Attrs,
-		settings:     cfg.Settings,
-		statsHandler: statsHandler,
-		fileRegistry: fileRegistry,
-		fs:           cfg.Opts.FS,
-		logger:       cfg.Opts.Logger,
-	}
+	p.logger = cfg.Opts.Logger
 	p.connectEventMetrics(ctx, &cfg.Opts.EventListener)
 	p.eventListener = &cfg.Opts.EventListener
 	p.wrappedIntentWriter = wrapIntentWriter(ctx, p, cfg.Settings, true /* isLongLived */)
@@ -1192,6 +1205,23 @@ func (p *Pebble) Stat(name string) (os.FileInfo, error) {
 // CreateCheckpoint implements the Engine interface.
 func (p *Pebble) CreateCheckpoint(dir string) error {
 	return p.db.Checkpoint(dir)
+}
+
+// OnOutOfDisk implements the Engine interface.
+func (p *Pebble) OnOutOfDisk(cb func(vfs.FS)) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.mu.outOfDiskFns = append(p.mu.outOfDiskFns, cb)
+}
+
+func (p *Pebble) invokeOutOfDiskCallbacks(innerFS vfs.FS) func() {
+	return func() {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		for _, fn := range p.mu.outOfDiskFns {
+			fn(innerFS)
+		}
+	}
 }
 
 type pebbleReadOnly struct {

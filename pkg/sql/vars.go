@@ -141,6 +141,24 @@ var varGen = map[string]sessionVar{
 		GlobalDefault: func(_ *settings.Values) string { return "" },
 	},
 
+	// TODO(jackosn): This will need to move to be sorted.
+	`ignore_out_of_disk_mode`: {
+		Set: func(
+			_ context.Context, m *sessionDataMutator, s string,
+		) error {
+			b, err := paramparse.ParseBoolVar("ignore_out_of_disk_mode", s)
+			if err != nil {
+				return err
+			}
+			m.SetIgnoreOutOfDiskMode(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.IgnoreOutOfDiskMode)
+		},
+		GlobalDefault: globalFalse,
+	},
+
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html
 	// and https://www.postgresql.org/docs/10/static/datatype-binary.html
 	`bytea_output`: {

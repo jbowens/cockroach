@@ -166,6 +166,7 @@ type Node struct {
 	lastUp       int64
 	initialStart bool // True if this is the first time this node has started.
 	txnMetrics   kvcoord.TxnMetrics
+	oodMonitor   *OutOfDiskMonitor
 
 	// Used to signal when additional stores, if any, have been initialized.
 	additionalStoreInitCh chan struct{}
@@ -307,6 +308,7 @@ func NewNode(
 		txnMetrics: txnMetrics,
 		sqlExec:    sqlExec,
 		clusterID:  clusterID,
+		oodMonitor: newOutOfDiskMonitor(stores, cfg.Settings, stopper),
 	}
 	n.perReplicaServer = kvserver.MakeServer(&n.Descriptor, n.stores)
 	return n

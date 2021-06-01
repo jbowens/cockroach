@@ -332,6 +332,9 @@ message StoreCapacity {
   // This information can be used for rebalancing decisions.
   optional Percentiles bytes_per_replica = 6 [(gogoproto.nullable) = false];
   optional Percentiles writes_per_replica = 7 [(gogoproto.nullable) = false];
+  // out_of_disk_space records whether this store has exhausted its available
+  // disk space.
+  optional bool out_of_disk_space = 11 [(gogoproto.nullable) = false];
 }
 
 // NodeDescriptor holds details on node physical/network topology.
