@@ -523,16 +523,6 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 		}
 	}
 
-	auxDir := cfg.Opts.FS.PathJoin(cfg.Dir, base.AuxiliaryDir)
-	if err := cfg.Opts.FS.MkdirAll(auxDir, 0755); err != nil {
-		return nil, err
-	}
-
-	fileRegistry, statsHandler, err := ResolveEncryptedEnvOptions(&cfg)
-	if err != nil {
-		return nil, err
-	}
-
 	// The context dance here is done so that we have a clean context without
 	// timeouts that has a copy of the log tags.
 	logCtx := logtags.WithTags(context.Background(), logtags.FromContext(ctx))
@@ -545,6 +535,19 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (*Pebble, error) {
 		ctx:   logCtx,
 		depth: 2, // skip over the EventListener stack frame
 	})
+
+	auxDir := cfg.Opts.FS.PathJoin(cfg.Dir, base.AuxiliaryDir)
+	if err := cfg.Opts.FS.MkdirAll(auxDir, 0755); err != nil {
+		return nil, err
+	}
+
+	setupOutOfDiskHandling(cfg.Opts, auxDir)
+
+	fileRegistry, statsHandler, err := ResolveEncryptedEnvOptions(&cfg)
+	if err != nil {
+		return nil, err
+	}
+
 	p := &Pebble{
 		path:         cfg.Dir,
 		auxDir:       auxDir,
@@ -594,6 +597,40 @@ func newPebbleInMem(
 		panic(err)
 	}
 	return db
+}
+
+func setupOutOfDiskHandling(opts *pebble.Options, auxDir string) {
+	innerFS := opts.FS
+	opts.FS = vfs.OnDiskFull(opts.FS, func() {
+		// Delete the recovery marker file, indicating to future process
+		// starts that we're out-of-disk space. Also delete the ballast so
+		// that a future process has enough headroom to rotate the logs.
+		err := errors.CombineErrors(
+			innerFS.Remove(base.DiskFullBallastFile(auxDir)),
+			innerFS.Remove(base.DiskFullRecoveryFile(auxDir)),
+		)
+
+		// Sync the auxiliary directory to ensure that the filesystem actually
+		// proccesses the deletes. The deletion of the ballast, if configured,
+		// should ensure there's disk space for our log output.
+		d, openErr := innerFS.OpenDir(auxDir)
+		if openErr != nil {
+			err = errors.CombineErrors(err, openErr)
+		} else {
+			err = errors.CombineErrors(err, d.Sync())
+			err = errors.CombineErrors(err, d.Close())
+		}
+		opts.Logger.Fatalf(`ATTENTION out of disk space:
+
+This node is exiting because a store is out of disk space. The file
+  %s
+was removed to prevent node startup which could inhibit recovery.
+Re-creating the file will permit node startup, but if the remaining disk
+space is exhausted, the node must be replaced. Please contact the
+CockroachDB support team for additional recovery guidance.
+
+Error(s) during ENOSPC handling: %s`, base.DiskFullRecoveryFile(auxDir), err)
+	})
 }
 
 func (p *Pebble) connectEventMetrics(ctx context.Context, eventListener *pebble.EventListener) {

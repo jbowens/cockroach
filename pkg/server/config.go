@@ -514,25 +514,31 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				engines = append(engines, storage.NewInMem(ctx, spec.Attributes, cfg.CacheSize, sizeInBytes, cfg.Settings))
 			}
 		} else {
+			fileSystemUsage := gosigar.FileSystemUsage{}
+			if err := fileSystemUsage.Get(spec.Path); err != nil {
+				return Engines{}, err
+			}
+
 			if spec.Size.Percent > 0 {
-				fileSystemUsage := gosigar.FileSystemUsage{}
-				if err := fileSystemUsage.Get(spec.Path); err != nil {
-					return Engines{}, err
-				}
 				sizeInBytes = int64(float64(fileSystemUsage.Total) * spec.Size.Percent / 100)
 			}
 			if sizeInBytes != 0 && !skipSizeCheck && sizeInBytes < base.MinimumStoreSize {
 				return Engines{}, errors.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
 					spec.Size.Percent, spec.Path, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
+			ballastSizeInBytes := spec.BallastSize.InBytes
+			if spec.BallastSize.Percent > 0 {
+				ballastSizeInBytes = int64(float64(fileSystemUsage.Total) * spec.BallastSize.Percent / 100)
+			}
 
-			details = append(details, fmt.Sprintf("store %d: RocksDB, max size %s, max open file limit %d",
-				i, humanizeutil.IBytes(sizeInBytes), openFileLimitPerStore))
+			details = append(details, fmt.Sprintf("store %d: Pebble, max size %s, ballast size %s, max open file limit %d",
+				i, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(ballastSizeInBytes), openFileLimitPerStore))
 
 			storageConfig := base.StorageConfig{
 				Attrs:             spec.Attributes,
 				Dir:               spec.Path,
 				MaxSize:           sizeInBytes,
+				BallastSize:       ballastSizeInBytes,
 				Settings:          cfg.Settings,
 				UseFileRegistry:   spec.UseFileRegistry,
 				EncryptionOptions: spec.EncryptionOptions,

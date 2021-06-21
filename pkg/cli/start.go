@@ -369,6 +369,9 @@ func runStart(cmd *cobra.Command, args []string, startSingleNode bool) (returnEr
 	if err := serverCfg.Stores.PriorCriticalAlertError(); err != nil {
 		return &cliError{exitCode: exit.FatalError(), cause: err}
 	}
+	if err := maybeWaitForDiskFullRecovery(ctx, serverCfg.Stores); err != nil {
+		return &cliError{exitCode: exit.FatalError(), cause: err}
+	}
 
 	// We don't care about GRPCs fairly verbose logs in most client commands,
 	// but when actually starting a server, we enable them.

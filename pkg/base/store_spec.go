@@ -162,10 +162,11 @@ func (ss *SizeSpec) Set(value string) error {
 // StoreSpec contains the details that can be specified in the cli pertaining
 // to the --store flag.
 type StoreSpec struct {
-	Path       string
-	Size       SizeSpec
-	InMemory   bool
-	Attributes roachpb.Attributes
+	Path        string
+	Size        SizeSpec
+	BallastSize SizeSpec
+	InMemory    bool
+	Attributes  roachpb.Attributes
 	// StickyInMemoryEngineID is a unique identifier associated with a given
 	// store which will remain in memory even after the default Engine close
 	// until it has been explicitly cleaned up by CleanupStickyInMemEngine[s]
@@ -202,6 +203,12 @@ func (ss StoreSpec) String() string {
 	}
 	if ss.Size.Percent > 0 {
 		fmt.Fprintf(&buffer, "size=%s%%,", humanize.Ftoa(ss.Size.Percent))
+	}
+	if ss.BallastSize.InBytes > 0 {
+		fmt.Fprintf(&buffer, "ballast-size=%s,", humanizeutil.IBytes(ss.BallastSize.InBytes))
+	}
+	if ss.BallastSize.Percent > 0 {
+		fmt.Fprintf(&buffer, "ballast-size=%s%%,", humanize.Ftoa(ss.BallastSize.Percent))
 	}
 	if len(ss.Attributes.Attrs) > 0 {
 		fmt.Fprint(&buffer, "attrs=")
@@ -260,6 +267,9 @@ var fractionRegex = regexp.MustCompile(`^([-]?([0-9]+\.[0-9]*|[0-9]*\.[0-9]+|[0-
 //   - 0.02TiB         -> 21474836480 bytes
 //   - 20%             -> 20% of the available space
 //   - 0.2             -> 20% of the available space
+// - ballast-size=xxx The optional amount to reserve for recovery if the
+//   store runs out of disk space. This can be in any of the same formats as
+//   the size field.
 // - attrs=xxx:yyy:zzz A colon separated list of optional attributes.
 // Note that commas are forbidden within any field name or value.
 func NewStoreSpec(value string) (StoreSpec, error) {
@@ -307,6 +317,19 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 			var minBytesAllowed int64 = MinimumStoreSize
 			var minPercent float64 = 1
 			var maxPercent float64 = 100
+			ss.Size, err = NewSizeSpec(
+				value,
+				&intInterval{min: &minBytesAllowed},
+				&floatInterval{min: &minPercent, max: &maxPercent},
+			)
+			if err != nil {
+				return StoreSpec{}, err
+			}
+		case "ballast-size":
+			var err error
+			var minBytesAllowed int64
+			var minPercent float64 = 1
+			var maxPercent float64 = 50
 			ss.Size, err = NewSizeSpec(
 				value,
 				&intInterval{min: &minBytesAllowed},
@@ -384,8 +407,16 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 		if ss.Size.Percent == 0 && ss.Size.InBytes == 0 {
 			return StoreSpec{}, fmt.Errorf("size must be specified for an in memory store")
 		}
-	} else if ss.Path == "" {
-		return StoreSpec{}, fmt.Errorf("no path specified")
+		if ss.BallastSize.Percent != 0 || ss.BallastSize.InBytes != 0 {
+			return StoreSpec{}, fmt.Errorf("ballast-size specified for in memory store")
+		}
+	} else {
+		if ss.Path == "" {
+			return StoreSpec{}, fmt.Errorf("no path specified")
+		}
+		if _, ok := used["ballast-size"]; !ok {
+			ss.BallastSize.Percent = 0.5 // 0.5%
+		}
 	}
 	return ss, nil
 }
@@ -421,6 +452,19 @@ const AuxiliaryDir = "auxiliary"
 // can block server startup.
 func PreventedStartupFile(dir string) string {
 	return filepath.Join(dir, "_CRITICAL_ALERT.txt")
+}
+
+// DiskFullRecoveryFile is the filename (relative to 'dir') used for a
+// disk full recovery file whose absence indicates a prior process ran out of
+// disk space.
+func DiskFullRecoveryFile(dir string) string {
+	return filepath.Join(dir, "DISK_FULL_RECOVERY")
+}
+
+// DiskFullBallastFile is the filename (relative to 'dir') used for an
+// emergency ballast file.
+func DiskFullBallastFile(dir string) string {
+	return filepath.Join(dir, "DISK_FULL_BALLAST")
 }
 
 // PriorCriticalAlertError attempts to read the
@@ -465,6 +509,28 @@ func (ss StoreSpec) PreventedStartupFile() string {
 		return ""
 	}
 	return PreventedStartupFile(filepath.Join(ss.Path, AuxiliaryDir))
+}
+
+// DiskFullRecoveryFile returns the path to a file which, if it does not
+// exist, indicates that the disk is full. The file's absence should prevent
+// the server from starting up, until capacity metrics show sufficient
+// available capacity. Returns an empty string for in-memory engines.
+func (ss StoreSpec) DiskFullRecoveryFile() string {
+	if ss.InMemory {
+		return ""
+	}
+	return DiskFullRecoveryFile(filepath.Join(ss.Path, AuxiliaryDir))
+}
+
+// DiskFullBallastFile returns the path to a file which reserves disk space
+// for recovery when a store's disk space is exhausted. The file's size is
+// determined by the spec's BallastSize field. Returns an empty string for
+// in-memory engines.
+func (ss StoreSpec) DiskFullBallastFile() string {
+	if ss.InMemory {
+		return ""
+	}
+	return DiskFullBallastFile(filepath.Join(ss.Path, AuxiliaryDir))
 }
 
 // Type returns the underlying type in string form. This is part of pflag's
