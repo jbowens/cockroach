@@ -431,3 +431,81 @@ func TestCanRegistryElide(t *testing.T) {
 	entry.EncryptionSettings = b
 	require.False(t, canRegistryElide(entry))
 }
+
+func TestLinkAndCreate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	memFS := vfs.NewMem()
+	require.NoError(t, memFS.MkdirAll("/store", os.ModeDir))
+
+	fileRegistry := &storage.PebbleFileRegistry{FS: memFS, DBDir: "/store"}
+	require.NoError(t, fileRegistry.Load())
+
+	var b1 []byte
+	for i := 0; i < keyIDLength+16; i++ {
+		b1 = append(b1, 'a')
+	}
+	keyfile1, err := memFS.Create("keyfile1")
+	require.NoError(t, err)
+	bReader1 := bytes.NewReader(b1)
+	_, err = io.Copy(keyfile1, bReader1)
+	require.NoError(t, err)
+	require.NoError(t, keyfile1.Close())
+
+	keyManager := &StoreKeyManager{fs: memFS, activeKeyFilename: "keyfile1", oldKeyFilename: "plain"}
+	require.NoError(t, keyManager.Load(context.Background()))
+	streamCreator := &FileCipherStreamCreator{keyManager: keyManager, envType: enginepb.EnvType_Store}
+	fs := &encryptedFS{FS: memFS, fileRegistry: fileRegistry, streamCreator: streamCreator}
+
+	f1, err := fs.Create("foo")
+	require.NoError(t, err)
+	_, err = f1.Write([]byte("hello world"))
+	require.NoError(t, err)
+	require.NoError(t, f1.Close())
+	require.NoError(t, fs.Link("foo", "bar"))
+
+	// Rotate the key.
+	var b2 []byte
+	for i := 0; i < keyIDLength+16; i++ {
+		b2 = append(b2, 'b')
+	}
+	keyfile2, err := memFS.Create("keyfile2")
+	require.NoError(t, err)
+	bReader2 := bytes.NewReader(b2)
+	_, err = io.Copy(keyfile2, bReader2)
+	require.NoError(t, err)
+	require.NoError(t, keyfile2.Close())
+
+	keyManager = &StoreKeyManager{fs: memFS, activeKeyFilename: "keyfile2", oldKeyFilename: "keyfile1"}
+	require.NoError(t, keyManager.Load(context.Background()))
+	streamCreator = &FileCipherStreamCreator{keyManager: keyManager, envType: enginepb.EnvType_Store}
+	fs = &encryptedFS{FS: memFS, fileRegistry: fileRegistry, streamCreator: streamCreator}
+
+	f2, err := fs.Create("bar")
+	require.NoError(t, err)
+	_, err = f2.Write([]byte("hello world"))
+	require.NoError(t, err)
+	require.NoError(t, f2.Close())
+
+	// Check that they match.
+	b1, b2 = make([]byte, 12), make([]byte, 12)
+	f1, f2 = nil, nil
+
+	f1, err = fs.Open("foo")
+	require.NoError(t, err)
+	f2, err = fs.Open("bar")
+	require.NoError(t, err)
+
+	_, err = f1.Read(b1)
+	require.NoError(t, err)
+
+	_, err = f2.Read(b2)
+	require.NoError(t, err)
+	require.Equal(t, b1, b2)
+
+	settings1 := &enginepbccl.EncryptionSettings{}
+	require.NoError(t, protoutil.Unmarshal(fileRegistry.GetFileEntry("foo").EncryptionSettings, settings1))
+	settings2 := &enginepbccl.EncryptionSettings{}
+	require.NoError(t, protoutil.Unmarshal(fileRegistry.GetFileEntry("bar").EncryptionSettings, settings2))
+	require.NotEqual(t, settings1.KeyId, settings2.KeyId)
+}
