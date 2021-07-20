@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -435,17 +436,19 @@ func TestCanRegistryElide(t *testing.T) {
 func TestLinkAndCreate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	memFS := vfs.NewMem()
-	require.NoError(t, memFS.MkdirAll("/store", os.ModeDir))
+	memFS := vfs.Default
+	tempDir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+	require.NoError(t, memFS.MkdirAll(tempDir, os.ModeDir))
 
-	fileRegistry := &storage.PebbleFileRegistry{FS: memFS, DBDir: "/store"}
+	fileRegistry := &storage.PebbleFileRegistry{FS: memFS, DBDir: tempDir}
 	require.NoError(t, fileRegistry.Load())
 
 	var b1 []byte
 	for i := 0; i < keyIDLength+16; i++ {
 		b1 = append(b1, 'a')
 	}
-	keyfile1, err := memFS.Create("keyfile1")
+	keyfile1, err := memFS.Create(tempDir + "/keyfile1")
 	require.NoError(t, err)
 	bReader1 := bytes.NewReader(b1)
 	_, err = io.Copy(keyfile1, bReader1)
@@ -457,19 +460,19 @@ func TestLinkAndCreate(t *testing.T) {
 	streamCreator := &FileCipherStreamCreator{keyManager: keyManager, envType: enginepb.EnvType_Store}
 	fs := &encryptedFS{FS: memFS, fileRegistry: fileRegistry, streamCreator: streamCreator}
 
-	f1, err := fs.Create("foo")
+	f1, err := fs.Create(tempDir + "/foo")
 	require.NoError(t, err)
 	_, err = f1.Write([]byte("hello world"))
 	require.NoError(t, err)
 	require.NoError(t, f1.Close())
-	require.NoError(t, fs.Link("foo", "bar"))
+	require.NoError(t, fs.Link(tempDir+"/foo", tempDir+"/bar"))
 
 	// Rotate the key.
 	var b2 []byte
 	for i := 0; i < keyIDLength+16; i++ {
 		b2 = append(b2, 'b')
 	}
-	keyfile2, err := memFS.Create("keyfile2")
+	keyfile2, err := memFS.Create(tempDir + "/keyfile2")
 	require.NoError(t, err)
 	bReader2 := bytes.NewReader(b2)
 	_, err = io.Copy(keyfile2, bReader2)
@@ -481,7 +484,7 @@ func TestLinkAndCreate(t *testing.T) {
 	streamCreator = &FileCipherStreamCreator{keyManager: keyManager, envType: enginepb.EnvType_Store}
 	fs = &encryptedFS{FS: memFS, fileRegistry: fileRegistry, streamCreator: streamCreator}
 
-	f2, err := fs.Create("bar")
+	f2, err := fs.Create(tempDir + "/bar")
 	require.NoError(t, err)
 	_, err = f2.Write([]byte("hello world"))
 	require.NoError(t, err)
@@ -491,9 +494,9 @@ func TestLinkAndCreate(t *testing.T) {
 	b1, b2 = make([]byte, 12), make([]byte, 12)
 	f1, f2 = nil, nil
 
-	f1, err = fs.Open("foo")
+	f1, err = fs.Open(tempDir + "/foo")
 	require.NoError(t, err)
-	f2, err = fs.Open("bar")
+	f2, err = fs.Open(tempDir + "/bar")
 	require.NoError(t, err)
 
 	_, err = f1.Read(b1)
