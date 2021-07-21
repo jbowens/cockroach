@@ -13,6 +13,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"strconv"
 	"strings"
@@ -436,75 +437,70 @@ func TestCanRegistryElide(t *testing.T) {
 func TestLinkAndCreate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	memFS := vfs.Default
+	fs := vfs.Default
 	tempDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
-	require.NoError(t, memFS.MkdirAll(tempDir, os.ModeDir))
-
-	fileRegistry := &storage.PebbleFileRegistry{FS: memFS, DBDir: tempDir}
-	require.NoError(t, fileRegistry.Load())
-
-	var b1 []byte
-	for i := 0; i < keyIDLength+16; i++ {
-		b1 = append(b1, 'a')
+	require.NoError(t, fs.MkdirAll(tempDir, os.ModeDir))
+	mkpath := func(path string) string {
+		return fs.PathJoin(tempDir, path)
 	}
-	keyfile1, err := memFS.Create(tempDir + "/keyfile1")
-	require.NoError(t, err)
-	bReader1 := bytes.NewReader(b1)
-	_, err = io.Copy(keyfile1, bReader1)
-	require.NoError(t, err)
-	require.NoError(t, keyfile1.Close())
+	mkKey := func(path string, b byte) {
+		var k [keyIDLength + 16]byte
+		for i := 0; i < len(k); i++ {
+			k[i] = b
+		}
 
-	keyManager := &StoreKeyManager{fs: memFS, activeKeyFilename: "keyfile1", oldKeyFilename: "plain"}
+		f, err := fs.Create(mkpath(path))
+		require.NoError(t, err)
+		_, err = f.Write(k[:])
+		require.NoError(t, err)
+		require.NoError(t, f.Close())
+	}
+	readFile := func(path string) string {
+		f, err := fs.Open(mkpath(path))
+		require.NoError(t, err)
+		b, err := ioutil.ReadAll(f)
+		require.NoError(t, err)
+		require.NoError(t, f.Close())
+		return string(b)
+	}
+
+	fileRegistry := &storage.PebbleFileRegistry{FS: fs, DBDir: tempDir}
+	require.NoError(t, fileRegistry.Load())
+	mkKey("keyfile1", 'a')
+
+	keyManager := &StoreKeyManager{fs: fs, activeKeyFilename: mkpath("keyfile1"), oldKeyFilename: "plain"}
 	require.NoError(t, keyManager.Load(context.Background()))
 	streamCreator := &FileCipherStreamCreator{keyManager: keyManager, envType: enginepb.EnvType_Store}
-	fs := &encryptedFS{FS: memFS, fileRegistry: fileRegistry, streamCreator: streamCreator}
+	fs = &encryptedFS{FS: fs, fileRegistry: fileRegistry, streamCreator: streamCreator}
 
-	f1, err := fs.Create(tempDir + "/foo")
+	f1, err := fs.Create(mkpath("foo"))
 	require.NoError(t, err)
 	_, err = f1.Write([]byte("hello world"))
 	require.NoError(t, err)
 	require.NoError(t, f1.Close())
-	require.NoError(t, fs.Link(tempDir+"/foo", tempDir+"/bar"))
+	require.NoError(t, fs.Link(mkpath("foo"), mkpath("bar")))
 
 	// Rotate the key.
-	var b2 []byte
-	for i := 0; i < keyIDLength+16; i++ {
-		b2 = append(b2, 'b')
-	}
-	keyfile2, err := memFS.Create(tempDir + "/keyfile2")
-	require.NoError(t, err)
-	bReader2 := bytes.NewReader(b2)
-	_, err = io.Copy(keyfile2, bReader2)
-	require.NoError(t, err)
-	require.NoError(t, keyfile2.Close())
+	mkKey("keyfile2", 'b')
 
-	keyManager = &StoreKeyManager{fs: memFS, activeKeyFilename: "keyfile2", oldKeyFilename: "keyfile1"}
+	keyManager = &StoreKeyManager{fs: fs, activeKeyFilename: mkpath("keyfile2"), oldKeyFilename: mkpath("keyfile1")}
 	require.NoError(t, keyManager.Load(context.Background()))
 	streamCreator = &FileCipherStreamCreator{keyManager: keyManager, envType: enginepb.EnvType_Store}
-	fs = &encryptedFS{FS: memFS, fileRegistry: fileRegistry, streamCreator: streamCreator}
+	fs = &encryptedFS{FS: fs, fileRegistry: fileRegistry, streamCreator: streamCreator}
 
-	f2, err := fs.Create(tempDir + "/bar")
+	require.Equal(t, readFile("foo"), readFile("bar"))
+
+	f2, err := fs.Create(mkpath("bar"))
 	require.NoError(t, err)
 	_, err = f2.Write([]byte("hello world"))
 	require.NoError(t, err)
 	require.NoError(t, f2.Close())
 
 	// Check that they match.
-	b1, b2 = make([]byte, 12), make([]byte, 12)
-	f1, f2 = nil, nil
-
-	f1, err = fs.Open(tempDir + "/foo")
-	require.NoError(t, err)
-	f2, err = fs.Open(tempDir + "/bar")
-	require.NoError(t, err)
-
-	_, err = f1.Read(b1)
-	require.NoError(t, err)
-
-	_, err = f2.Read(b2)
-	require.NoError(t, err)
-	require.Equal(t, b1, b2)
+	fooContents := readFile("foo")
+	barContents := readFile("bar")
+	require.Equal(t, fooContents, barContents)
 
 	settings1 := &enginepbccl.EncryptionSettings{}
 	require.NoError(t, protoutil.Unmarshal(fileRegistry.GetFileEntry("foo").EncryptionSettings, settings1))
