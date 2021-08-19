@@ -482,7 +482,8 @@ var versionsSingleton = keyedVersions{
 	{
 		Key:     RecordsBasedRegistry,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 134},
-	}, {
+	},
+	{
 		Key:     AutoSpanConfigReconciliationJob,
 		Version: roachpb.Version{Major: 21, Minor: 1, Internal: 136},
 	},

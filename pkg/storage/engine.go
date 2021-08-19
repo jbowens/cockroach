@@ -789,9 +789,9 @@ type Engine interface {
 	// adjust their expectations.
 	IsSeparatedIntentsEnabledForTesting(ctx context.Context) bool
 
-	// DeprecateBaseEncryptionRegistry is used to signal to the engine that it
-	// should stop using the Base version monolithic encryption-at-rest registry.
-	DeprecateBaseEncryptionRegistry(version *roachpb.Version) error
+	// SetStorageMinVersion sets the minimum version that the storage
+	// engine must maintain compatability with.
+	SetStorageMinVersion(version roachpb.Version) error
 
 	// UsingRecordsEncryptionRegistry returns whether the engine is using the
 	// Records version incremental encryption-at-rest registry.
@@ -799,7 +799,7 @@ type Engine interface {
 
 	// MinVersionIsAtLeastTargetVersion returns whether the engine's recorded
 	// storage min version is at least the target version.
-	MinVersionIsAtLeastTargetVersion(target *roachpb.Version) (bool, error)
+	MinVersionIsAtLeastTargetVersion(target roachpb.Version) (bool, error)
 }
 
 // Batch is the interface for batch specific operations.

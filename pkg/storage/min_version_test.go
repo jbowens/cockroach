@@ -26,8 +26,8 @@ func TestMinVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	version1 := &roachpb.Version{Major: 21, Minor: 1, Patch: 0, Internal: 122}
-	version2 := &roachpb.Version{Major: 21, Minor: 1, Patch: 0, Internal: 126}
+	version1 := roachpb.Version{Major: 21, Minor: 1, Patch: 0, Internal: 122}
+	version2 := roachpb.Version{Major: 21, Minor: 1, Patch: 0, Internal: 126}
 
 	mem := vfs.NewMem()
 	dir := "/foo"
@@ -47,8 +47,8 @@ func TestMinVersion(t *testing.T) {
 	require.False(t, ok)
 
 	// Expect no error when updating min version if no file currently exists.
-	v = &roachpb.Version{}
-	proto.Merge(v, version1)
+	v = roachpb.Version{}
+	proto.Merge(&v, &version1)
 	require.NoError(t, WriteMinVersionFile(mem, dir, v))
 
 	// Expect min version to be version1.
@@ -65,8 +65,8 @@ func TestMinVersion(t *testing.T) {
 	require.False(t, ok)
 
 	// Expect no error when updating min version to a higher version.
-	v = &roachpb.Version{}
-	proto.Merge(v, version2)
+	v = roachpb.Version{}
+	proto.Merge(&v, &version2)
 	require.NoError(t, WriteMinVersionFile(mem, dir, v))
 
 	// Expect min version to be at least version1 and version2.
@@ -83,8 +83,8 @@ func TestMinVersion(t *testing.T) {
 	require.True(t, version2.Equal(v))
 
 	// Expect no-op when trying to update min version to a lower version.
-	v = &roachpb.Version{}
-	proto.Merge(v, version1)
+	v = roachpb.Version{}
+	proto.Merge(&v, &version1)
 	require.NoError(t, WriteMinVersionFile(mem, dir, v))
 	v, err = GetMinVersion(mem, dir)
 	require.NoError(t, err)

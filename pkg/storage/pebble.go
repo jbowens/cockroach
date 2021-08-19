@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1309,14 +1310,18 @@ func (p *Pebble) CreateCheckpoint(dir string) error {
 	return p.db.Checkpoint(dir)
 }
 
-// DeprecateBaseEncryptionRegistry implements the Engine interface.
-func (p *Pebble) DeprecateBaseEncryptionRegistry(version *roachpb.Version) error {
+// SetStorageMinVersion implements the Engine interface.
+func (p *Pebble) SetStorageMinVersion(version roachpb.Version) error {
 	if err := WriteMinVersionFile(p.fs, p.path, version); err != nil {
 		return err
 	}
+
 	if p.fileRegistry != nil {
-		if err := p.fileRegistry.StopUsingOldRegistry(); err != nil {
-			return err
+		recordsRegistryCV := clusterversion.ByKey(clusterversion.RecordsBasedRegistry)
+		if !version.Less(recordsRegistryCV) {
+			if err := p.fileRegistry.StopUsingOldRegistry(); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -1331,7 +1336,7 @@ func (p *Pebble) UsingRecordsEncryptionRegistry() (bool, error) {
 }
 
 // MinVersionIsAtLeastTargetVersion implements the Engine interface.
-func (p *Pebble) MinVersionIsAtLeastTargetVersion(target *roachpb.Version) (bool, error) {
+func (p *Pebble) MinVersionIsAtLeastTargetVersion(target roachpb.Version) (bool, error) {
 	return MinVersionIsAtLeastTargetVersion(p.fs, p.path, target)
 }
 
