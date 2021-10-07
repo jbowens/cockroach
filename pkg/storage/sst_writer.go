@@ -266,6 +266,11 @@ func (fw *SSTWriter) ClearIterRange(iter MVCCIterator, start, end roachpb.Key) e
 	panic("ClearIterRange is unsupported")
 }
 
+// DeleteRangeMVCC implements the Writer interface.
+func (fw *SSTWriter) DeleteRangeMVCC(MVCCRangeTombstone) error {
+	panic("MVCCDeleteRange is unsupported")
+}
+
 // Merge implements the Writer interface.
 func (fw *SSTWriter) Merge(key MVCCKey, value []byte) error {
 	if fw.fw == nil {

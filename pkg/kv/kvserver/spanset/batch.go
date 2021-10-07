@@ -608,6 +608,13 @@ func (s spanSetWriter) ClearIterRange(iter storage.MVCCIterator, start, end roac
 	return s.w.ClearIterRange(iter, start, end)
 }
 
+func (s spanSetWriter) DeleteRangeMVCC(tomb storage.MVCCRangeTombstone) error {
+	if err := s.checkAllowedRange(tomb.Start, tomb.End); err != nil {
+		return err
+	}
+	return s.w.DeleteRangeMVCC(tomb)
+}
+
 func (s spanSetWriter) Merge(key storage.MVCCKey, value []byte) error {
 	if s.spansOnly {
 		if err := s.spans.CheckAllowed(SpanReadWrite, roachpb.Span{Key: key.Key}); err != nil {

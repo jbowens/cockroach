@@ -621,6 +621,17 @@ type Writer interface {
 	// returns.
 	ClearIterRange(iter MVCCIterator, start, end roachpb.Key) error
 
+	// DeleteRangeMVCC writes a tombstone logically deleting keys in the
+	// given span at the provided timestamp. DeleteRangeMVCC performs
+	// constant writes, recording a single MVCC range tombstone marking
+	// the span as deleted. When removing large swaths of contiguous
+	// MVCC keyspace, it is preferrable to use DeleteRangeMVCC over
+	// writing individual MVCC point tombstones.
+	//
+	// TODO(jackson): Update this comment when we know more, eg, whether
+	// we'll fragment.
+	DeleteRangeMVCC(MVCCRangeTombstone) error
+
 	// Merge is a high-performance write operation used for values which are
 	// accumulated over several writes. Multiple values can be merged
 	// sequentially into a single key; a subsequent read will return a "merged"

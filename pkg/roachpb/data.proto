@@ -753,3 +753,12 @@ message RangeInfo {
   Lease lease = 2 [(gogoproto.nullable) = false];
   RangeClosedTimestampPolicy closed_timestamp_policy = 3;
 }
+
+// MVCCRangeTombstoneValue is stored as the value of a MVCC Range
+// Tombstone key in the local range operations keyspace.
+//
+// TODO(jackson): Decide on whether start or end key goes in the
+// tombstone's key or value.
+message MVCCRangeTombstoneValue {
+  bytes end_key                = 1 [(gogoproto.casttype) = "Key"];
+}

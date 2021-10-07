@@ -426,6 +426,15 @@ func (p *pebbleBatch) ClearIterRange(iter MVCCIterator, start, end roachpb.Key) 
 	return nil
 }
 
+// DeleteRangeMVCC implements the Engine interface.
+func (p *pebbleBatch) DeleteRangeMVCC(tombstone MVCCRangeTombstone) error {
+	v, err := tombstone.value()
+	if err != nil {
+		return err
+	}
+	return p.put(tombstone.Key(), v)
+}
+
 // Merge implements the Batch interface.
 func (p *pebbleBatch) Merge(key MVCCKey, value []byte) error {
 	if len(key.Key) == 0 {
