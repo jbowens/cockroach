@@ -162,6 +162,19 @@ func (p *pebbleIterator) init(handle pebble.Reader, iterToClone cloneableIter, o
 				uint64(opts.MinTimestampHint.WallTime),
 				uint64(opts.MaxTimestampHint.WallTime)+1),
 		}
+		p.options.KeyFilter = pebble.KeyFilterFunc(func(key []byte) (isVisible bool, err error) {
+			mvccKey, err := DecodeMVCCKey(key)
+			if err != nil {
+				return false, err
+			}
+			if mvccKey.Timestamp.WallTime < opts.MinTimestampHint.WallTime {
+				return false, nil
+			}
+			if mvccKey.Timestamp.WallTime >= opts.MaxTimestampHint.WallTime {
+				return false, nil
+			}
+			return true, nil
+		})
 	} else if !opts.MinTimestampHint.IsEmpty() {
 		panic("min timestamp hint set without max timestamp hint")
 	}
