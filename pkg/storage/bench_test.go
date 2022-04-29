@@ -849,6 +849,9 @@ func runMVCCScan(ctx context.Context, b *testing.B, emk engineMaker, opts benchS
 	eng, _ := setupMVCCData(ctx, b, emk, opts.benchDataOptions)
 	defer eng.Close()
 
+	batch := eng.NewBatch()
+	defer batch.Close()
+
 	{
 		// Pull all of the sstables into the RocksDB cache in order to make the
 		// timings more stable. Otherwise, the first run will be penalized pulling
@@ -883,7 +886,7 @@ func runMVCCScan(ctx context.Context, b *testing.B, emk engineMaker, opts benchS
 		if opts.wholeRows {
 			wholeRowsOfSize = int32(opts.numColumnFamilies)
 		}
-		res, err := MVCCScan(ctx, eng, startKey, endKey, ts, MVCCScanOptions{
+		res, err := MVCCScan(ctx, batch, startKey, endKey, ts, MVCCScanOptions{
 			MaxKeys:         int64(opts.numRows),
 			WholeRowsOfSize: wholeRowsOfSize,
 			AllowEmpty:      wholeRowsOfSize != 0,
@@ -919,6 +922,9 @@ func runMVCCGet(ctx context.Context, b *testing.B, emk engineMaker, opts benchDa
 	eng, _ := setupMVCCData(ctx, b, emk, opts)
 	defer eng.Close()
 
+	batch := eng.NewBatch()
+	defer batch.Close()
+
 	b.SetBytes(int64(opts.valueBytes))
 	b.ResetTimer()
 
@@ -929,7 +935,7 @@ func runMVCCGet(ctx context.Context, b *testing.B, emk engineMaker, opts benchDa
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(keyIdx)))
 		walltime := int64(5 * (rand.Int31n(int32(opts.numVersions)) + 1))
 		ts := hlc.Timestamp{WallTime: walltime}
-		if v, _, err := MVCCGet(ctx, eng, key, ts, MVCCGetOptions{}); err != nil {
+		if v, _, err := MVCCGet(ctx, batch, key, ts, MVCCGetOptions{}); err != nil {
 			b.Fatalf("failed get: %+v", err)
 		} else if v == nil {
 			b.Fatalf("failed get (key not found): %d@%d", keyIdx, walltime)
