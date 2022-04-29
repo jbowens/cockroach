@@ -39,9 +39,8 @@ type pebbleIterator struct {
 	// use two slices for each of the bounds since this caller should not change
 	// the slice holding the current bounds, that the callee (pebble.MVCCIterator)
 	// is currently using, until after the caller has made the SetOptions call.
-	lowerBoundBuf [2][]byte
-	upperBoundBuf [2][]byte
-	curBuf        int
+	lowerBoundBuf []byte
+	upperBoundBuf []byte
 
 	// Set to true to govern whether to call SeekPrefixGE or SeekGE. Skips
 	// SSTables based on MVCC/Engine key when true.
@@ -150,7 +149,6 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 		OnlyReadGuaranteedDurable: durability == GuaranteedDurability,
 	}
 
-	newBuf := 1 - p.curBuf
 	if opts.LowerBound != nil {
 		// This is the same as
 		// p.options.LowerBound = EncodeKeyToBuf(p.lowerBoundBuf[0][:0], MVCCKey{Key: opts.LowerBound})
@@ -158,15 +156,15 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 		// Since we are encoding keys with an empty version anyway, we can just
 		// append the NUL byte instead of calling the above encode functions which
 		// will do the same thing.
-		p.lowerBoundBuf[newBuf] = append(p.lowerBoundBuf[newBuf][:0], opts.LowerBound...)
-		p.lowerBoundBuf[newBuf] = append(p.lowerBoundBuf[newBuf], 0x00)
-		newOptions.LowerBound = p.lowerBoundBuf[newBuf]
+		p.lowerBoundBuf = append(p.lowerBoundBuf[:0], opts.LowerBound...)
+		p.lowerBoundBuf = append(p.lowerBoundBuf, 0x00)
+		newOptions.LowerBound = p.lowerBoundBuf
 	}
 	if opts.UpperBound != nil {
 		// Same as above.
-		p.upperBoundBuf[newBuf] = append(p.upperBoundBuf[newBuf][:0], opts.UpperBound...)
-		p.upperBoundBuf[newBuf] = append(p.upperBoundBuf[newBuf], 0x00)
-		newOptions.UpperBound = p.upperBoundBuf[newBuf]
+		p.upperBoundBuf = append(p.upperBoundBuf[:0], opts.UpperBound...)
+		p.upperBoundBuf = append(p.upperBoundBuf, 0x00)
+		newOptions.UpperBound = p.upperBoundBuf
 	}
 
 	if opts.MaxTimestampHint.IsSet() {
@@ -211,7 +209,7 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 	// (with unknown existing options) always has SetOptions() called on them: we
 	// require either Prefix, UpperBound, or LowerBound to be set, so one of these
 	// won't match the zero value of a new iterator.
-	optsChanged := opts.Prefix != p.prefix ||
+	/*optsChanged := opts.Prefix != p.prefix ||
 		newOptions.OnlyReadGuaranteedDurable != p.options.OnlyReadGuaranteedDurable ||
 		!bytes.Equal(newOptions.UpperBound, p.options.UpperBound) ||
 		!bytes.Equal(newOptions.LowerBound, p.options.LowerBound) ||
@@ -221,12 +219,11 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 		newOptions.PointKeyFilters != nil || p.options.PointKeyFilters != nil
 	if !optsChanged {
 		return
-	}
+	}*/
 
 	// Set the new iterator options.
 	p.options = newOptions
 	p.prefix = opts.Prefix
-	p.curBuf = newBuf
 
 	if p.iter != nil {
 		p.iter.SetOptions(&p.options)
