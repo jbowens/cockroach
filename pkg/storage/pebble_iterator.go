@@ -12,13 +12,17 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"math"
+	"os"
+	"runtime/debug"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -108,6 +112,10 @@ func newPebbleSSTIterator(files []sstable.ReadableFile, opts IterOptions) (*pebb
 	p.reusable = false // defensive
 	p.init(nil, opts, StandardDurability, true /* supportsRangeKeys */)
 
+	for i := 0; i < len(files); i++ {
+		files[i] = errorLoggingFile{num: i, f: files[i]}
+	}
+
 	var err error
 	if p.iter, err = pebble.NewExternalIter(DefaultPebbleOptions(), &p.options, files); err != nil {
 		p.Close()
@@ -115,6 +123,40 @@ func newPebbleSSTIterator(files []sstable.ReadableFile, opts IterOptions) (*pebb
 	}
 	return p, nil
 }
+
+type errorLoggingFile struct {
+	num int
+	f   sstable.ReadableFile
+}
+
+func (f errorLoggingFile) ReadAt(p []byte, off int64) (n int, err error) {
+	n, err = f.f.ReadAt(p, off)
+	if err != nil {
+		log.Warningf(context.Background(), "errorLoggingFile: file%d.ReadAt([%d buffer], %d) = (%d, %q)\n%s",
+			f.num, len(p), off, n, err, debug.Stack())
+	}
+	return n, err
+}
+
+func (f errorLoggingFile) Close() error {
+	err := f.f.Close()
+	if err != nil {
+		log.Warningf(context.Background(), "errorLoggingFile: file%d.Close() = (%d, %q)\n%s",
+			f.num, err, debug.Stack())
+	}
+	return err
+}
+
+func (f errorLoggingFile) Stat() (os.FileInfo, error) {
+	info, err := f.f.Stat()
+	if err != nil {
+		log.Warningf(context.Background(), "errorLoggingFile: file%d.Stat() = (%p, %q)\n%s",
+			f.num, info, err, debug.Stack())
+	}
+	return info, err
+}
+
+var _ sstable.ReadableFile = errorLoggingFile{}
 
 // init resets this pebbleIterator for use with the specified arguments,
 // reconfiguring the given iter. It is valid to pass a nil iter and then create
