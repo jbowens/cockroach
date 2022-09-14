@@ -464,10 +464,6 @@ func (p *pebbleIterator) NextKey() {
 	if valid, err := p.Valid(); err != nil || !valid {
 		return
 	}
-	p.keyBuf = append(p.keyBuf[:0], p.UnsafeKey().Key...)
-	if !p.iter.Next() {
-		return
-	}
 
 	// Prefix iterators can't move onto a separate key by definition, so we
 	// exhaust the iterator. We could just set mvccDone, but that wouldn't
@@ -484,26 +480,29 @@ func (p *pebbleIterator) NextKey() {
 		return
 	}
 
-	// If the Next() call above didn't move to a different key, seek to it.
-	if p.UnsafeKey().Key.Equal(p.keyBuf) {
-		// This is equivalent to:
-		// p.iter.SeekGE(EncodeKey(MVCCKey{p.UnsafeKey().Key.Next(), hlc.Timestamp{}}))
-		seekKey := append(p.keyBuf, 0, 0)
-		p.iter.SeekGE(seekKey)
-		// If there's a range key straddling the seek point (e.g. a-c when seeking
-		// to b), it will be surfaced first as a bare range key. However, unless it
-		// started exactly at the seek key then it has already been emitted, so we
-		// step past it to the next key, which may be either a point key or range
-		// key starting past the seek key.
-		//
-		// NB: We have to be careful to use p.iter methods below, rather than
-		// pebbleIterator methods, since seekKey is an already-encoded roachpb.Key
-		// in raw Pebble key form.
-		if p.iter.Valid() {
-			if hasPoint, hasRange := p.iter.HasPointAndRange(); !hasPoint && hasRange {
-				if startKey, _ := p.iter.RangeBounds(); bytes.Compare(startKey, seekKey) < 0 {
-					p.iter.Next()
-				}
+	// Seek to the next user key. Previous iterations of this code would first
+	// Next once to see whether we'd arrive at a the next key. However, Pebble
+	// already has an analagous TrySeekUsingNext optimization that triggers if
+	// we just seek, so seek instead.
+	//
+	// This is equivalent to:
+	// p.iter.SeekGE(EncodeKey(MVCCKey{p.UnsafeKey().Key.Next(), hlc.Timestamp{}}))
+	p.keyBuf = append(append(p.keyBuf[:0], p.UnsafeKey().Key...), 0, 0)
+	seekKey := p.keyBuf
+	p.iter.SeekGE(seekKey)
+	// If there's a range key straddling the seek point (e.g. a-c when seeking
+	// to b), it will be surfaced first as a bare range key. However, unless it
+	// started exactly at the seek key then it has already been emitted, so we
+	// step past it to the next key, which may be either a point key or range
+	// key starting past the seek key.
+	//
+	// NB: We have to be careful to use p.iter methods below, rather than
+	// pebbleIterator methods, since seekKey is an already-encoded roachpb.Key
+	// in raw Pebble key form.
+	if p.iter.Valid() {
+		if hasPoint, hasRange := p.iter.HasPointAndRange(); !hasPoint && hasRange {
+			if startKey, _ := p.iter.RangeBounds(); bytes.Compare(startKey, seekKey) < 0 {
+				p.iter.Next()
 			}
 		}
 	}
