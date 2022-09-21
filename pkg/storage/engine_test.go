@@ -2097,9 +2097,10 @@ func TestEngineRangeKeysUnsupported(t *testing.T) {
 	// All range key iterators should degrade gracefully to point key iterators,
 	// and be empty for IterKeyTypeRangesOnly.
 	keyTypes := map[string]IterKeyType{
-		"PointsOnly":      IterKeyTypePointsOnly,
-		"PointsAndRanges": IterKeyTypePointsAndRanges,
-		"RangesOnly":      IterKeyTypeRangesOnly,
+		"PointsOnly":       IterKeyTypePointsOnly,
+		"PointsAndRanges":  IterKeyTypePointsAndRanges,
+		"PointsWithRanges": IterKeyTypePointsWithRanges,
+		"RangesOnly":       IterKeyTypeRangesOnly,
 	}
 	for name, r := range readers {
 		for keyTypeName, keyType := range keyTypes {

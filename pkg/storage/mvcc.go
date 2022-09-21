@@ -975,7 +975,7 @@ func MVCCGet(
 	ctx context.Context, reader Reader, key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
 ) (*roachpb.Value, *roachpb.Intent, error) {
 	iter := newMVCCIterator(reader, timestamp, false /* rangeKeyMasking */, IterOptions{
-		KeyTypes: IterKeyTypePointsAndRanges,
+		KeyTypes: IterKeyTypePointsWithRanges,
 		Prefix:   true,
 	})
 	defer iter.Close()

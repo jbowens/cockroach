@@ -456,6 +456,10 @@ const (
 	IterKeyTypePointsOnly = pebble.IterKeyTypePointsOnly
 	// IterKeyTypePointsAndRanges iterates over both point and range keys.
 	IterKeyTypePointsAndRanges = pebble.IterKeyTypePointsAndRanges
+	// IterKeyTypePointsWithRanges iterates over both point keys, but surfacing
+	// range keys that cover the current point key. Range keys bounds are not
+	// available with this iteration mode.
+	IterKeyTypePointsWithRanges = pebble.IterKeyTypePointsWithRanges
 	// IterKeyTypeRangesOnly iterates over only range keys.
 	IterKeyTypeRangesOnly = pebble.IterKeyTypeRangesOnly
 )
