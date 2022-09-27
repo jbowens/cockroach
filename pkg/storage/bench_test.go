@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors/oserror"
+	"github.com/cockroachdb/pebble"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1238,6 +1239,7 @@ func runMVCCBatchPut(ctx context.Context, b *testing.B, emk engineMaker, valueSi
 	b.SetBytes(int64(valueSize))
 	b.ResetTimer()
 
+	var stats pebble.IteratorStats
 	for i := 0; i < b.N; i += batchSize {
 		end := i + batchSize
 		if end > b.N {
@@ -1258,10 +1260,19 @@ func runMVCCBatchPut(ctx context.Context, b *testing.B, emk engineMaker, valueSi
 			b.Fatal(err)
 		}
 
+		if readStatser, ok := batch.(ReadStatser); ok {
+			mergeStats(&stats, readStatser.ReadStats())
+		}
+
 		batch.Close()
 	}
-
 	b.StopTimer()
+	b.ReportMetric(float64(stats.ForwardSeekCount[pebble.InterfaceCall])/float64(b.N), "fwdseekcount")
+	b.ReportMetric(float64(stats.ForwardSeekCount[pebble.InternalIterCall])/float64(b.N), "fwdinternalseekcount")
+}
+
+type ReadStatser interface {
+	ReadStats() pebble.IteratorStats
 }
 
 // Benchmark batch time series merge operations. This benchmark does not

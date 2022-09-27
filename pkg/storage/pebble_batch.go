@@ -131,6 +131,35 @@ func (p *pebbleBatch) Close() {
 	pebbleBatchPool.Put(p)
 }
 
+// ReadStats returns the cumulative stats of the batch's iterator reads.
+func (p *pebbleBatch) ReadStats() pebble.IteratorStats {
+	var total pebble.IteratorStats
+	for _, it := range [4]*pebbleIterator{
+		&p.prefixIter,
+		&p.normalIter,
+		&p.prefixEngineIter,
+		&p.normalEngineIter,
+	} {
+		if !it.inuse {
+			continue
+		}
+		mergeStats(&total, it.iter.Stats())
+	}
+	return total
+}
+
+// mergeStats adds all of the second argument's statistics to the first
+// argument. It may be used to accumulate stats across multiple iterators.
+func mergeStats(stats *pebble.IteratorStats, o pebble.IteratorStats) {
+	for i := pebble.InterfaceCall; i < pebble.NumStatsKind; i++ {
+		stats.ForwardSeekCount[i] += o.ForwardSeekCount[i]
+		stats.ReverseSeekCount[i] += o.ReverseSeekCount[i]
+		stats.ForwardStepCount[i] += o.ForwardStepCount[i]
+		stats.ReverseStepCount[i] += o.ReverseStepCount[i]
+	}
+	stats.InternalStats.Merge(o.InternalStats)
+}
+
 // Closed implements the Batch interface.
 func (p *pebbleBatch) Closed() bool {
 	return p.closed
