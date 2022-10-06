@@ -86,7 +86,8 @@ func BenchmarkMVCCScan_Pebble(b *testing.B) {
 							for _, numRangeKeys := range []int{0, 1, 100} {
 								b.Run(fmt.Sprintf("numRangeKeys=%d", numRangeKeys), func(b *testing.B) {
 									runMVCCScan(ctx, b, setupMVCCPebble, benchScanOptions{
-										benchDataOptions: benchDataOptions{
+										mvccBenchConfig: mvccBenchConfig{
+											inMemory:     false,
 											numVersions:  numVersions,
 											valueBytes:   valueSize,
 											numRangeKeys: numRangeKeys,
@@ -115,7 +116,8 @@ func BenchmarkMVCCScanGarbage_Pebble(b *testing.B) {
 					for _, numRangeKeys := range []int{0, 1, 100} {
 						b.Run(fmt.Sprintf("numRangeKeys=%d", numRangeKeys), func(b *testing.B) {
 							runMVCCScan(ctx, b, setupMVCCPebble, benchScanOptions{
-								benchDataOptions: benchDataOptions{
+								mvccBenchConfig: mvccBenchConfig{
+									inMemory:     false,
 									numVersions:  numVersions,
 									numRangeKeys: numRangeKeys,
 									garbage:      true,
@@ -146,7 +148,8 @@ func BenchmarkMVCCScanSQLRows_Pebble(b *testing.B) {
 									for _, wholeRows := range []bool{false, true} {
 										b.Run(fmt.Sprintf("wholeRows=%t", wholeRows), func(b *testing.B) {
 											runMVCCScan(ctx, b, setupMVCCPebble, benchScanOptions{
-												benchDataOptions: benchDataOptions{
+												mvccBenchConfig: mvccBenchConfig{
+													inMemory:          false,
 													numColumnFamilies: numColumnFamilies,
 													numVersions:       numVersions,
 													valueBytes:        valueSize,
@@ -180,7 +183,8 @@ func BenchmarkMVCCReverseScan_Pebble(b *testing.B) {
 							for _, numRangeKeys := range []int{0, 1, 100} {
 								b.Run(fmt.Sprintf("numRangeKeys=%d", numRangeKeys), func(b *testing.B) {
 									runMVCCScan(ctx, b, setupMVCCPebble, benchScanOptions{
-										benchDataOptions: benchDataOptions{
+										mvccBenchConfig: mvccBenchConfig{
+											inMemory:     false,
 											numVersions:  numVersions,
 											valueBytes:   valueSize,
 											numRangeKeys: numRangeKeys,
@@ -203,7 +207,8 @@ func BenchmarkMVCCScanTransactionalData_Pebble(b *testing.B) {
 	defer log.Scope(b).Close(b)
 	runMVCCScan(ctx, b, setupMVCCPebble, benchScanOptions{
 		numRows: 10000,
-		benchDataOptions: benchDataOptions{
+		mvccBenchConfig: mvccBenchConfig{
+			inMemory:      false,
 			numVersions:   2,
 			valueBytes:    8,
 			transactional: true,
@@ -223,7 +228,8 @@ func BenchmarkMVCCGet_Pebble(b *testing.B) {
 						b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
 							for _, numRangeKeys := range []int{0, 1, 100} {
 								b.Run(fmt.Sprintf("numRangeKeys=%d", numRangeKeys), func(b *testing.B) {
-									runMVCCGet(ctx, b, setupMVCCPebble, benchDataOptions{
+									runMVCCGet(ctx, b, setupMVCCPebble, mvccBenchConfig{
+										inMemory:     false,
 										numVersions:  numVersions,
 										valueBytes:   valueSize,
 										numRangeKeys: numRangeKeys,
@@ -234,31 +240,6 @@ func BenchmarkMVCCGet_Pebble(b *testing.B) {
 					}
 				})
 			}
-		})
-	}
-}
-
-func BenchmarkMVCCComputeStats_Pebble(b *testing.B) {
-	skip.UnderShort(b)
-	defer log.Scope(b).Close(b)
-	ctx := context.Background()
-	for _, valueSize := range []int{8, 32, 256} {
-		b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
-			for _, numRangeKeys := range []int{0, 1, 100} {
-				b.Run(fmt.Sprintf("numRangeKeys=%d", numRangeKeys), func(b *testing.B) {
-					runMVCCComputeStats(ctx, b, setupMVCCPebble, valueSize, numRangeKeys)
-				})
-			}
-		})
-	}
-}
-
-func BenchmarkMVCCFindSplitKey_Pebble(b *testing.B) {
-	defer log.Scope(b).Close(b)
-	ctx := context.Background()
-	for _, valueSize := range []int{32} {
-		b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
-			runMVCCFindSplitKey(ctx, b, setupMVCCPebble, valueSize)
 		})
 	}
 }
@@ -405,48 +386,11 @@ func BenchmarkMVCCGetMergedTimeSeries_Pebble(b *testing.B) {
 	}
 }
 
-// DeleteRange benchmarks below (using on-disk data).
-//
-// TODO(peter): Benchmark{MVCCDeleteRange,ClearRange,ClearIterRange}_Pebble
-// give nonsensical results (DeleteRange is absurdly slow and ClearRange
-// reports a processing speed of 481 million MB/s!). We need to take a look at
-// what these benchmarks are trying to measure, and fix them.
-
-func BenchmarkMVCCDeleteRange_Pebble(b *testing.B) {
-	skip.UnderShort(b)
-	defer log.Scope(b).Close(b)
-	ctx := context.Background()
-	for _, valueSize := range []int{8, 32, 256} {
-		b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
-			runMVCCDeleteRange(ctx, b, setupMVCCPebble, valueSize)
-		})
-	}
-}
-
-func BenchmarkMVCCDeleteRangeUsingTombstone_Pebble(b *testing.B) {
-	skip.UnderShort(b)
-	defer log.Scope(b).Close(b)
-	ctx := context.Background()
-	for _, numKeys := range []int{1000, 10000, 100000} {
-		b.Run(fmt.Sprintf("numKeys=%d", numKeys), func(b *testing.B) {
-			for _, valueSize := range []int{64} {
-				b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
-					for _, entireRange := range []bool{false, true} {
-						b.Run(fmt.Sprintf("entireRange=%t", entireRange), func(b *testing.B) {
-							runMVCCDeleteRangeUsingTombstone(ctx, b, setupMVCCPebble, numKeys, valueSize, entireRange)
-						})
-					}
-				})
-			}
-		})
-	}
-}
-
 func BenchmarkClearMVCCVersions_Pebble(b *testing.B) {
 	skip.UnderShort(b)
 	defer log.Scope(b).Close(b)
 	ctx := context.Background()
-	runClearRange(ctx, b, setupMVCCPebble, func(eng Engine, batch Batch, start, end MVCCKey) error {
+	runClearRange(ctx, b, func(eng Engine, batch Batch, start, end MVCCKey) error {
 		return batch.ClearMVCCVersions(start, end)
 	})
 }
@@ -454,7 +398,7 @@ func BenchmarkClearMVCCVersions_Pebble(b *testing.B) {
 func BenchmarkClearMVCCIteratorRange_Pebble(b *testing.B) {
 	ctx := context.Background()
 	defer log.Scope(b).Close(b)
-	runClearRange(ctx, b, setupMVCCPebble, func(eng Engine, batch Batch, start, end MVCCKey) error {
+	runClearRange(ctx, b, func(eng Engine, batch Batch, start, end MVCCKey) error {
 		return batch.ClearMVCCIteratorRange(start.Key, end.Key, true, true)
 	})
 }

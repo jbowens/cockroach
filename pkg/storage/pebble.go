@@ -523,6 +523,7 @@ func DefaultPebbleOptions() *pebble.Options {
 	opts := &pebble.Options{
 		Comparer:                    EngineComparer,
 		FS:                          vfs.Default,
+		FormatMajorVersion:          pebble.FormatPrePebblev1Marked,
 		L0CompactionThreshold:       2,
 		L0StopWritesThreshold:       1000,
 		LBaseMaxBytes:               64 << 20, // 64 MB

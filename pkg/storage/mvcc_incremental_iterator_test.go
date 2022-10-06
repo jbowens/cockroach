@@ -1475,9 +1475,10 @@ func collectMatchingWithMVCCIterator(
 }
 
 func runIncrementalBenchmark(
-	b *testing.B, emk engineMaker, ts hlc.Timestamp, opts benchDataOptions,
+	b *testing.B, ts hlc.Timestamp, opts mvccBenchConfig,
 ) {
-	eng, _ := setupMVCCData(context.Background(), b, emk, opts)
+	eng := getInitialConditionsEngine(context.Background(), b, opts)
+	defer eng.Close()
 	{
 		// Pull all of the sstables into the cache.  This
 		// probably defeats a lot of the benefits of the
@@ -1487,7 +1488,6 @@ func runIncrementalBenchmark(
 			b.Fatalf("stats failed: %s", err)
 		}
 	}
-	defer eng.Close()
 
 	startKey := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(0)))
 	endKey := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(opts.numKeys)))
@@ -1516,27 +1516,11 @@ func BenchmarkMVCCIncrementalIterator(b *testing.B) {
 	numVersions := 100
 	numKeys := 1000
 	valueBytes := 1000
-
-	setupMVCCPebbleWithBlockProperties := func(b testing.TB, dir string) Engine {
-		peb, err := Open(
-			context.Background(),
-			Filesystem(dir),
-			CacheSize(testCacheSize),
-			func(cfg *engineConfig) error {
-				cfg.Opts.FormatMajorVersion = pebble.FormatBlockPropertyCollector
-				return nil
-			})
-
-		if err != nil {
-			b.Fatalf("could not create new pebble instance at %s: %+v", dir, err)
-		}
-		return peb
-	}
 	for _, tsExcludePercent := range []float64{0, 0.95} {
 		wallTime := int64((5 * (float64(numVersions)*tsExcludePercent + 1)))
 		ts := hlc.Timestamp{WallTime: wallTime}
 		b.Run(fmt.Sprintf("ts=%d", ts.WallTime), func(b *testing.B) {
-			runIncrementalBenchmark(b, setupMVCCPebbleWithBlockProperties, ts, benchDataOptions{
+			runIncrementalBenchmark(b, ts, mvccBenchConfig{
 				numVersions: numVersions,
 				numKeys:     numKeys,
 				valueBytes:  valueBytes,

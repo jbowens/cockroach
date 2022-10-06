@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -41,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors/oserror"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
 
@@ -101,7 +101,7 @@ func BenchmarkMVCCGarbageCollect(b *testing.B) {
 																b.Run(fmt.Sprintf("updateStats=%t", stats), func(b *testing.B) {
 																	runMVCCGarbageCollect(ctx, b, engineImpl.create,
 																		benchGarbageCollectOptions{
-																			benchDataOptions: benchDataOptions{
+																			mvccBenchConfig: mvccBenchConfig{
 																				numKeys:      numKeys,
 																				numVersions:  versions.total,
 																				valueBytes:   valSize,
@@ -360,6 +360,7 @@ func BenchmarkIntentScan(b *testing.B) {
 			for _, percentFlushed := range []int{0, 50, 80, 90, 100} {
 				b.Run(fmt.Sprintf("percent-flushed=%d", percentFlushed), func(b *testing.B) {
 					eng := setupMVCCInMemPebbleWithSeparatedIntents(b)
+					defer eng.Close()
 					numFlushedVersions := (percentFlushed * numVersions) / 100
 					setupKeysWithIntent(b, eng, numVersions, numFlushedVersions, false, /* resolveAll */
 						1, false /* resolveIntentForLatestVersionWhenNotLockUpdate */)
@@ -368,6 +369,7 @@ func BenchmarkIntentScan(b *testing.B) {
 						LowerBound: lower,
 						UpperBound: makeKey(nil, numIntentKeys),
 					})
+					defer iter.Close()
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
 						valid, err := iter.Valid()
@@ -420,11 +422,18 @@ func BenchmarkScanAllIntentsResolved(b *testing.B) {
 			for _, percentFlushed := range []int{0, 50, 90, 100} {
 				b.Run(fmt.Sprintf("percent-flushed=%d", percentFlushed), func(b *testing.B) {
 					eng := setupMVCCInMemPebbleWithSeparatedIntents(b)
+					defer eng.Close()
 					numFlushedVersions := (percentFlushed * numVersions) / 100
 					setupKeysWithIntent(b, eng, numVersions, numFlushedVersions, true, /* resolveAll */
 						1, false /* resolveIntentForLatestVersionWhenNotLockUpdate */)
+
 					lower := makeKey(nil, 0)
 					var iter MVCCIterator
+					defer func() {
+						if iter != nil {
+							iter.Close()
+						}
+					}()
 					var buf []byte
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
@@ -450,6 +459,9 @@ func BenchmarkScanAllIntentsResolved(b *testing.B) {
 							// practice, so we don't want it to happen in this Benchmark
 							// either.
 							b.StopTimer()
+							if iter != nil {
+								iter.Close()
+							}
 							iter = eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 								LowerBound: lower,
 								UpperBound: makeKey(nil, numIntentKeys),
@@ -487,36 +499,40 @@ func BenchmarkScanOneAllIntentsResolved(b *testing.B) {
 			for _, percentFlushed := range []int{0, 50, 90, 100} {
 				b.Run(fmt.Sprintf("percent-flushed=%d", percentFlushed), func(b *testing.B) {
 					eng := setupMVCCInMemPebbleWithSeparatedIntents(b)
+					defer eng.Close()
 					numFlushedVersions := (percentFlushed * numVersions) / 100
 					setupKeysWithIntent(b, eng, numVersions, numFlushedVersions, true, /* resolveAll */
 						1, false /* resolveIntentForLatestVersionWhenNotLockUpdate */)
+
 					lower := makeKey(nil, 0)
 					upper := makeKey(nil, numIntentKeys)
 					buf := append([]byte(nil), lower...)
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
-						iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
-							LowerBound: buf,
-							UpperBound: upper,
-						})
-						iter.SeekGE(MVCCKey{Key: buf})
-						valid, err := iter.Valid()
-						if err != nil {
-							b.Fatal(err)
-						}
-						if !valid {
-							buf = append(buf[:0], lower...)
-						} else {
-							// Read latest version.
-							k := iter.UnsafeKey()
-							if !k.IsValue() {
-								b.Fatalf("expected value %s", k.String())
+						func() {
+							iter := eng.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
+								LowerBound: buf,
+								UpperBound: upper,
+							})
+							defer iter.Close()
+							iter.SeekGE(MVCCKey{Key: buf})
+							valid, err := iter.Valid()
+							if err != nil {
+								b.Fatal(err)
 							}
-							// Skip to next key.
-							buf = append(buf[:0], k.Key...)
-							buf = encoding.BytesNext(buf)
-							iter.Close()
-						}
+							if !valid {
+								buf = append(buf[:0], lower...)
+							} else {
+								// Read latest version.
+								k := iter.UnsafeKey()
+								if !k.IsValue() {
+									b.Fatalf("expected value %s", k.String())
+								}
+								// Skip to next key.
+								buf = append(buf[:0], k.Key...)
+								buf = encoding.BytesNext(buf)
+							}
+						}()
 					}
 				})
 			}
@@ -638,7 +654,8 @@ const overhead = 48 // Per key/value overhead (empirically determined)
 
 type engineMaker func(testing.TB, string) Engine
 
-type benchDataOptions struct {
+type mvccBenchConfig struct {
+	inMemory          bool
 	numVersions       int
 	numKeys           int
 	valueBytes        int
@@ -660,22 +677,192 @@ type benchDataOptions struct {
 	// mode simulates data that has been RESTOREd or is old enough to have been
 	// fully compacted.
 	transactional bool
+
+	// If set, the entire database is compacted before running.
+	compacted bool
 }
 
-// loadTestData writes numKeys keys in numBatches separate batches. Keys are
-// written in order. Every key in a given batch has the same MVCC timestamp;
-// batch timestamps start at batchTimeSpan and increase in intervals of
-// batchTimeSpan.
-//
-// Importantly, writing keys in order convinces RocksDB to output one SST per
-// batch, where each SST contains keys of only one timestamp. E.g., writing A,B
-// at t0 and C at t1 will create two SSTs: one for A,B that only contains keys
-// at t0, and one for C that only contains keys at t1. Conversely, writing A, C
-// at t0 and B at t1 would create just one SST that contained A,B,C (due to an
-// immediate compaction).
-//
-// The creation of the database is time consuming, so the caller can choose
-// whether to use a temporary or permanent location.
+func (c mvccBenchConfig) Key() []string {
+	return []string{
+		"mvcc",
+		fmt.Sprintf("numKeys_%d", c.numKeys),
+		fmt.Sprintf("numVersions_%d", c.numVersions),
+		fmt.Sprintf("valueBytes_%d", c.valueBytes),
+		fmt.Sprintf("numColFams_%d", c.numColumnFamilies),
+		fmt.Sprintf("numRangeKeys_%d", c.numRangeKeys),
+		fmt.Sprintf("garbage_%t", c.garbage),
+		fmt.Sprintf("transactional_%t", c.transactional),
+		fmt.Sprintf("compacted_%t", c.compacted),
+	}
+}
+
+func (c mvccBenchConfig) ConfigOptions() []ConfigOption { return nil }
+func (c mvccBenchConfig) InMemory() bool                { return c.inMemory }
+func (c mvccBenchConfig) Build(ctx context.Context, b *testing.B, eng Engine) error {
+	// Writes up to numVersions values at each of numKeys keys. The number of
+	// versions written for each key is chosen randomly according to a uniform
+	// distribution. Each successive version is written starting at 5ns and then
+	// in 5ns increments. This allows scans at various times, starting at t=5ns,
+	// and continuing to t=5ns*(numVersions+1). A version for each key will be
+	// read on every such scan, but the dynamics of the scan will change
+	// depending on the historical timestamp. Earlier timestamps mean scans
+	// which must skip more historical versions; later timestamps mean scans
+	// which skip fewer.
+	//
+	// MVCC range keys are written below all point keys unless garbage=true.
+	// They're always written with random start/end bounds, at increasing
+	// logical timestamps (WallTime 0).
+	//
+	// The creation of the database is time consuming, especially for larger
+	// numbers of versions. The database is persisted between runs and stored in
+	// a directory with the path elements returned by Key().
+
+	// Generate the same data every time.
+	rng := rand.New(rand.NewSource(1449168817))
+
+	// Write MVCC range keys. If garbage is enabled, they will be written on top
+	// of the point keys, otherwise they will be written below them.
+	writeRangeKeys := func(b testing.TB, wallTime int) {
+		batch := eng.NewBatch()
+		defer batch.Close()
+		for i := 0; i < c.numRangeKeys; i++ {
+			ts := hlc.Timestamp{WallTime: int64(wallTime), Logical: int32(i + 1)}
+			start := rng.Intn(c.numKeys)
+			end := start + rng.Intn(c.numKeys-start) + 1
+			// As a special case, if we're only writing one range key, write it across
+			// the entire span.
+			if c.numRangeKeys == 1 {
+				start = 0
+				end = c.numKeys + 1
+			}
+			startKey := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(start)))
+			endKey := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(end)))
+			require.NoError(b, MVCCDeleteRangeUsingTombstone(
+				ctx, batch, nil, startKey, endKey, ts, hlc.ClockTimestamp{}, nil, nil, false, 0, nil))
+		}
+		require.NoError(b, batch.Commit(false /* sync */))
+	}
+	if !c.garbage {
+		writeRangeKeys(b, 0 /* wallTime */)
+	}
+
+	// Generate point keys.
+	keySlice := make([]roachpb.Key, c.numKeys)
+	var order []int
+	var cf uint32
+	for i := 0; i < c.numKeys; i++ {
+		if c.numColumnFamilies > 0 {
+			keySlice[i] = makeBenchRowKey(b, nil, i/c.numColumnFamilies, cf)
+			cf = (cf + 1) % uint32(c.numColumnFamilies)
+		} else {
+			keySlice[i] = roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(i)))
+		}
+		keyVersions := rng.Intn(c.numVersions) + 1
+		for j := 0; j < keyVersions; j++ {
+			order = append(order, i)
+		}
+	}
+
+	// Randomize the order in which the keys are written.
+	for i, n := 0, len(order); i < n-1; i++ {
+		j := i + rng.Intn(n-i)
+		order[i], order[j] = order[j], order[i]
+	}
+
+	counts := make([]int, c.numKeys)
+
+	var txn *roachpb.Transaction
+	if c.transactional {
+		txnCopy := *txn1Commit
+		txn = &txnCopy
+	}
+
+	writeKey := func(batch Batch, idx int) {
+		key := keySlice[idx]
+		var value roachpb.Value
+		if !c.garbage {
+			value = roachpb.MakeValueFromBytes(randutil.RandBytes(rng, c.valueBytes))
+			value.InitChecksum(key)
+		}
+		counts[idx]++
+		ts := hlc.Timestamp{WallTime: int64(counts[idx] * 5)}
+		if txn != nil {
+			txn.ReadTimestamp = ts
+			txn.WriteTimestamp = ts
+		}
+		if err := MVCCPut(ctx, batch, nil, key, ts, hlc.ClockTimestamp{}, value, txn); err != nil {
+			b.Fatal(err)
+		}
+	}
+
+	resolveLastIntent := func(batch Batch, idx int) {
+		key := keySlice[idx]
+		txnMeta := txn.TxnMeta
+		txnMeta.WriteTimestamp = hlc.Timestamp{WallTime: int64(counts[idx]) * 5}
+		if _, err := MVCCResolveWriteIntent(ctx, batch, nil /* ms */, roachpb.LockUpdate{
+			Span:   roachpb.Span{Key: key},
+			Status: roachpb.COMMITTED,
+			Txn:    txnMeta,
+		}); err != nil {
+			b.Fatal(err)
+		}
+	}
+
+	batch := eng.NewBatch()
+	defer batch.Close()
+	for i, idx := range order {
+		// Output the keys in ~20 batches. If we used a single batch to output all
+		// of the keys rocksdb would create a single sstable. We want multiple
+		// sstables in order to exercise filtering of which sstables are examined
+		// during iterator seeking. We fix the number of batches we output so that
+		// optimizations which change the data size result in the same number of
+		// sstables.
+		if scaled := len(order) / 20; i > 0 && (i%scaled) == 0 {
+			log.Infof(ctx, "committing (%d/~%d)", i/scaled, 20)
+			if err := batch.Commit(false /* sync */); err != nil {
+				return err
+			}
+			batch.Close()
+			batch = eng.NewBatch()
+			if err := eng.Flush(); err != nil {
+				return err
+			}
+		}
+
+		if c.transactional {
+			// If we've previously written this key transactionally, we need to
+			// resolve the intent we left. We don't do this immediately after writing
+			// the key to introduce the possibility that the intent's resolution ends
+			// up in a different batch than writing the intent itself. Note that the
+			// first time through this loop for any given key we'll attempt to resolve
+			// a non-existent intent, but that's OK.
+			resolveLastIntent(batch, idx)
+		}
+		writeKey(batch, idx)
+	}
+	if c.transactional {
+		// If we were writing transactionally, we need to do one last round of
+		// intent resolution. Just stuff it all into the last batch.
+		for idx := range keySlice {
+			resolveLastIntent(batch, idx)
+		}
+	}
+	if err := batch.Commit(false /* sync */); err != nil {
+		return err
+	}
+
+	// If we're writing garbage, write MVCC range tombstones on top of the
+	// point keys.
+	if c.garbage {
+		writeRangeKeys(b, 10*c.numVersions)
+	}
+
+	if err := eng.Flush(); err != nil {
+		return err
+	}
+	return nil
+}
+
 func loadTestData(dir string, numKeys, numBatches, batchTimeSpan, valueBytes int) (Engine, error) {
 	ctx := context.Background()
 
@@ -748,201 +935,8 @@ func loadTestData(dir string, numKeys, numBatches, batchTimeSpan, valueBytes int
 	return eng, nil
 }
 
-// setupMVCCData writes up to numVersions values at each of numKeys
-// keys. The number of versions written for each key is chosen
-// randomly according to a uniform distribution. Each successive
-// version is written starting at 5ns and then in 5ns increments. This
-// allows scans at various times, starting at t=5ns, and continuing to
-// t=5ns*(numVersions+1). A version for each key will be read on every
-// such scan, but the dynamics of the scan will change depending on
-// the historical timestamp. Earlier timestamps mean scans which must
-// skip more historical versions; later timestamps mean scans which
-// skip fewer.
-//
-// MVCC range keys are always written below all point keys, with random
-// start/end bounds, at increasing logical timestamps (WallTime 0).
-//
-// The creation of the database is time consuming, especially for larger numbers
-// of versions. The database is persisted between runs and stored in the current
-// directory as "mvcc_scan_<versions>_<keys>_<columnFamilies>_<valueBytes>"
-// (which is also returned).
-func setupMVCCData(
-	ctx context.Context, b *testing.B, emk engineMaker, opts benchDataOptions,
-) (Engine, string) {
-	loc := fmt.Sprintf("mvcc_data_%d_%d_%d_%d_%d",
-		opts.numVersions, opts.numKeys, opts.numColumnFamilies, opts.valueBytes, opts.numRangeKeys)
-	if opts.transactional {
-		loc += "_txn"
-	}
-	if opts.garbage {
-		loc += "_garbage"
-	}
-
-	exists := true
-	if _, err := os.Stat(loc); oserror.IsNotExist(err) {
-		exists = false
-	} else {
-		require.NoError(b, err)
-	}
-
-	eng := emk(b, loc)
-
-	if exists {
-		testutils.ReadAllFiles(filepath.Join(loc, "*"))
-		return eng, loc
-	}
-
-	log.Infof(ctx, "creating mvcc data: %s", loc)
-
-	// Generate the same data every time.
-	rng := rand.New(rand.NewSource(1449168817))
-
-	// Write MVCC range keys. If garbage is enabled, they will be written on top
-	// of the point keys, otherwise they will be written below them.
-	writeRangeKeys := func(b testing.TB, wallTime int) {
-		batch := eng.NewBatch()
-		defer batch.Close()
-		for i := 0; i < opts.numRangeKeys; i++ {
-			ts := hlc.Timestamp{WallTime: int64(wallTime), Logical: int32(i + 1)}
-			start := rng.Intn(opts.numKeys)
-			end := start + rng.Intn(opts.numKeys-start) + 1
-			// As a special case, if we're only writing one range key, write it across
-			// the entire span.
-			if opts.numRangeKeys == 1 {
-				start = 0
-				end = opts.numKeys + 1
-			}
-			startKey := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(start)))
-			endKey := roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(end)))
-			require.NoError(b, MVCCDeleteRangeUsingTombstone(
-				ctx, batch, nil, startKey, endKey, ts, hlc.ClockTimestamp{}, nil, nil, false, 0, nil))
-		}
-		require.NoError(b, batch.Commit(false /* sync */))
-	}
-	if !opts.garbage {
-		writeRangeKeys(b, 0 /* wallTime */)
-	}
-
-	// Generate point keys.
-	keySlice := make([]roachpb.Key, opts.numKeys)
-	var order []int
-	var cf uint32
-	for i := 0; i < opts.numKeys; i++ {
-		if opts.numColumnFamilies > 0 {
-			keySlice[i] = makeBenchRowKey(b, nil, i/opts.numColumnFamilies, cf)
-			cf = (cf + 1) % uint32(opts.numColumnFamilies)
-		} else {
-			keySlice[i] = roachpb.Key(encoding.EncodeUvarintAscending([]byte("key-"), uint64(i)))
-		}
-		keyVersions := rng.Intn(opts.numVersions) + 1
-		for j := 0; j < keyVersions; j++ {
-			order = append(order, i)
-		}
-	}
-
-	// Randomize the order in which the keys are written.
-	for i, n := 0, len(order); i < n-1; i++ {
-		j := i + rng.Intn(n-i)
-		order[i], order[j] = order[j], order[i]
-	}
-
-	counts := make([]int, opts.numKeys)
-
-	var txn *roachpb.Transaction
-	if opts.transactional {
-		txnCopy := *txn1Commit
-		txn = &txnCopy
-	}
-
-	writeKey := func(batch Batch, idx int) {
-		key := keySlice[idx]
-		var value roachpb.Value
-		if !opts.garbage {
-			value = roachpb.MakeValueFromBytes(randutil.RandBytes(rng, opts.valueBytes))
-			value.InitChecksum(key)
-		}
-		counts[idx]++
-		ts := hlc.Timestamp{WallTime: int64(counts[idx] * 5)}
-		if txn != nil {
-			txn.ReadTimestamp = ts
-			txn.WriteTimestamp = ts
-		}
-		if err := MVCCPut(ctx, batch, nil, key, ts, hlc.ClockTimestamp{}, value, txn); err != nil {
-			b.Fatal(err)
-		}
-	}
-
-	resolveLastIntent := func(batch Batch, idx int) {
-		key := keySlice[idx]
-		txnMeta := txn.TxnMeta
-		txnMeta.WriteTimestamp = hlc.Timestamp{WallTime: int64(counts[idx]) * 5}
-		if _, err := MVCCResolveWriteIntent(ctx, batch, nil /* ms */, roachpb.LockUpdate{
-			Span:   roachpb.Span{Key: key},
-			Status: roachpb.COMMITTED,
-			Txn:    txnMeta,
-		}); err != nil {
-			b.Fatal(err)
-		}
-	}
-
-	batch := eng.NewBatch()
-	for i, idx := range order {
-		// Output the keys in ~20 batches. If we used a single batch to output all
-		// of the keys rocksdb would create a single sstable. We want multiple
-		// sstables in order to exercise filtering of which sstables are examined
-		// during iterator seeking. We fix the number of batches we output so that
-		// optimizations which change the data size result in the same number of
-		// sstables.
-		if scaled := len(order) / 20; i > 0 && (i%scaled) == 0 {
-			log.Infof(ctx, "committing (%d/~%d)", i/scaled, 20)
-			if err := batch.Commit(false /* sync */); err != nil {
-				b.Fatal(err)
-			}
-			batch.Close()
-			batch = eng.NewBatch()
-			if err := eng.Flush(); err != nil {
-				b.Fatal(err)
-			}
-		}
-
-		if opts.transactional {
-			// If we've previously written this key transactionally, we need to
-			// resolve the intent we left. We don't do this immediately after writing
-			// the key to introduce the possibility that the intent's resolution ends
-			// up in a different batch than writing the intent itself. Note that the
-			// first time through this loop for any given key we'll attempt to resolve
-			// a non-existent intent, but that's OK.
-			resolveLastIntent(batch, idx)
-		}
-		writeKey(batch, idx)
-	}
-	if opts.transactional {
-		// If we were writing transactionally, we need to do one last round of
-		// intent resolution. Just stuff it all into the last batch.
-		for idx := range keySlice {
-			resolveLastIntent(batch, idx)
-		}
-	}
-	if err := batch.Commit(false /* sync */); err != nil {
-		b.Fatal(err)
-	}
-	batch.Close()
-
-	// If we're writing garbage, write MVCC range tombstones on top of the
-	// point keys.
-	if opts.garbage {
-		writeRangeKeys(b, 10*opts.numVersions)
-	}
-
-	if err := eng.Flush(); err != nil {
-		b.Fatal(err)
-	}
-
-	return eng, loc
-}
-
 type benchScanOptions struct {
-	benchDataOptions
+	mvccBenchConfig
 	numRows   int
 	reverse   bool
 	wholeRows bool
@@ -965,7 +959,7 @@ func runMVCCScan(ctx context.Context, b *testing.B, emk engineMaker, opts benchS
 		b.Fatal("test error: wholeRows requires numColumnFamilies > 0")
 	}
 
-	eng, _ := setupMVCCData(ctx, b, emk, opts.benchDataOptions)
+	eng := getInitialConditionsEngine(ctx, b, opts)
 	defer eng.Close()
 
 	{
@@ -1032,7 +1026,7 @@ func runMVCCScan(ctx context.Context, b *testing.B, emk engineMaker, opts benchS
 // runMVCCGet first creates test data (and resets the benchmarking
 // timer). It then performs b.N MVCCGets.
 func runMVCCGet(
-	ctx context.Context, b *testing.B, emk engineMaker, opts benchDataOptions, useBatch bool,
+	ctx context.Context, b *testing.B, emk engineMaker, opts mvccBenchConfig, useBatch bool,
 ) {
 	// Use the same number of keys for all of the mvcc scan
 	// benchmarks. Using a different number of keys per test gives
@@ -1043,7 +1037,7 @@ func runMVCCGet(
 	}
 	opts.numKeys = 100000
 
-	eng, _ := setupMVCCData(ctx, b, emk, opts)
+	eng := getInitialConditionsEngine(ctx, b, opts)
 	defer eng.Close()
 
 	r := Reader(eng)
@@ -1370,92 +1364,111 @@ func runMVCCGetMergedValue(
 	b.StopTimer()
 }
 
-func runMVCCDeleteRange(ctx context.Context, b *testing.B, emk engineMaker, valueBytes int) {
-	// 512 KB ranges so the benchmark doesn't take forever
-	const rangeBytes = 512 * 1024
-	numKeys := rangeBytes / (overhead + valueBytes)
-	eng, dir := setupMVCCData(ctx, b, emk, benchDataOptions{
-		numVersions: 1,
-		numKeys:     numKeys,
-		valueBytes:  valueBytes,
-	})
-	eng.Close()
+// DeleteRange benchmarks below (using on-disk data).
+//
+// TODO(peter): Benchmark{MVCCDeleteRange,ClearRange,ClearIterRange}_Pebble
+// give nonsensical results (DeleteRange is absurdly slow and ClearRange
+// reports a processing speed of 481 million MB/s!). We need to take a look at
+// what these benchmarks are trying to measure, and fix them.
 
-	b.SetBytes(rangeBytes)
-	b.StopTimer()
-	b.ResetTimer()
-
-	locDirty := dir + "_dirty"
-
-	for i := 0; i < b.N; i++ {
-		if err := os.RemoveAll(locDirty); err != nil {
-			b.Fatal(err)
-		}
-		if err := fileutil.CopyDir(dir, locDirty); err != nil {
-			b.Fatal(err)
-		}
-		func() {
-			eng := emk(b, locDirty)
-			defer eng.Close()
-
-			b.StartTimer()
-			if _, _, _, err := MVCCDeleteRange(
-				ctx,
-				eng,
-				&enginepb.MVCCStats{},
-				keys.LocalMax,
-				roachpb.KeyMax,
-				math.MaxInt64,
-				hlc.MaxTimestamp,
-				hlc.ClockTimestamp{},
-				nil,
-				false,
-			); err != nil {
-				b.Fatal(err)
+func BenchmarkMVCCDeleteRange_Pebble(b *testing.B) {
+	skip.UnderShort(b)
+	defer log.Scope(b).Close(b)
+	ctx := context.Background()
+	for _, valueSize := range []int{8, 32, 256} {
+		b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
+			// 512 KB ranges so the benchmark doesn't take forever
+			const rangeBytes = 512 * 1024
+			numKeys := rangeBytes / (overhead + valueSize)
+			config := mvccBenchConfig{
+				inMemory:    false,
+				numVersions: 1,
+				numKeys:     numKeys,
+				valueBytes:  valueSize,
 			}
+
+			b.SetBytes(rangeBytes)
 			b.StopTimer()
-		}()
+			b.ResetTimer()
+
+			for i := 0; i < b.N; i++ {
+				func() {
+					eng := getInitialConditionsEngine(ctx, b, config)
+					defer eng.Close()
+
+					b.StartTimer()
+					if _, _, _, err := MVCCDeleteRange(
+						ctx,
+						eng,
+						&enginepb.MVCCStats{},
+						keys.LocalMax,
+						roachpb.KeyMax,
+						math.MaxInt64,
+						hlc.MaxTimestamp,
+						hlc.ClockTimestamp{},
+						nil,
+						false,
+					); err != nil {
+						b.Fatal(err)
+					}
+					b.StopTimer()
+				}()
+			}
+		})
+	}
+}
+
+func BenchmarkMVCCDeleteRangeUsingTombstone_Pebble(b *testing.B) {
+	skip.UnderShort(b)
+	defer log.Scope(b).Close(b)
+	ctx := context.Background()
+	for _, numKeys := range []int{1000, 10000, 100000} {
+		b.Run(fmt.Sprintf("numKeys=%d", numKeys), func(b *testing.B) {
+			for _, valueSize := range []int{64} {
+				b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
+					for _, entireRange := range []bool{false, true} {
+						b.Run(fmt.Sprintf("entireRange=%t", entireRange), func(b *testing.B) {
+							runMVCCDeleteRangeUsingTombstone(ctx, b, numKeys, valueSize, entireRange)
+						})
+					}
+				})
+			}
+		})
 	}
 }
 
 func runMVCCDeleteRangeUsingTombstone(
-	ctx context.Context, b *testing.B, emk engineMaker, numKeys int, valueBytes int, entireRange bool,
+	ctx context.Context, b *testing.B, numKeys int, valueBytes int, entireRange bool,
 ) {
-	eng, dir := setupMVCCData(ctx, b, emk, benchDataOptions{
+	config := mvccBenchConfig{
+		inMemory:    false,
 		numVersions: 1,
 		numKeys:     numKeys,
 		valueBytes:  valueBytes,
-	})
-	require.NoError(b, eng.Compact())
+		compacted:   true,
+	}
 
 	var msCovered *enginepb.MVCCStats
 	var leftPeekBound, rightPeekBound roachpb.Key
 	if entireRange {
-		ms, err := ComputeStats(eng, keys.LocalMax, keys.MaxKey, 0)
-		require.NoError(b, err)
-
 		leftPeekBound = keys.LocalMax
 		rightPeekBound = keys.MaxKey
-		msCovered = &ms
+		func() {
+			eng := getInitialConditionsEngine(ctx, b, config)
+			defer eng.Close()
+			ms, err := ComputeStats(eng, keys.LocalMax, keys.MaxKey, 0)
+			require.NoError(b, err)
+			msCovered = &ms
+		}()
 	}
-
-	eng.Close()
 
 	b.SetBytes(int64(numKeys) * int64(overhead+valueBytes))
 	b.StopTimer()
 	b.ResetTimer()
 
-	locDirty := dir + "_dirty"
-
 	for i := 0; i < b.N; i++ {
-		if err := os.RemoveAll(locDirty); err != nil {
-			b.Fatal(err)
-		}
-		if err := fileutil.CopyDir(dir, locDirty); err != nil {
-			b.Fatal(err)
-		}
 		func() {
-			eng := emk(b, locDirty)
+			eng := getInitialConditionsEngine(ctx, b, config)
 			defer eng.Close()
 
 			b.StartTimer()
@@ -1483,13 +1496,17 @@ func runMVCCDeleteRangeUsingTombstone(
 func runClearRange(
 	ctx context.Context,
 	b *testing.B,
-	emk engineMaker,
 	clearRange func(e Engine, b Batch, start, end MVCCKey) error,
 ) {
+	// TODO(jackson): This benchmark doesn't seem useful. It measures the speed
+	// of writing a delete range tombstone to a batch? Should we repurpose to
+	// measure time until the cleared data is deleted?
+
 	const rangeBytes = 64 << 20
 	const valueBytes = 92
 	numKeys := rangeBytes / (overhead + valueBytes)
-	eng, _ := setupMVCCData(ctx, b, emk, benchDataOptions{
+	eng := getInitialConditionsEngine(ctx, b, mvccBenchConfig{
+		inMemory:    false, // tktk: check
 		numVersions: 1,
 		numKeys:     numKeys,
 		valueBytes:  valueBytes,
@@ -1515,63 +1532,79 @@ func runClearRange(
 }
 
 // runMVCCComputeStats benchmarks computing MVCC stats on a 64MB range of data.
-func runMVCCComputeStats(
-	ctx context.Context, b *testing.B, emk engineMaker, valueBytes int, numRangeKeys int,
-) {
-	const rangeBytes = 64 * 1024 * 1024
-	numKeys := rangeBytes / (overhead + valueBytes)
-	eng, _ := setupMVCCData(ctx, b, emk, benchDataOptions{
-		numVersions:  1,
-		numKeys:      numKeys,
-		valueBytes:   valueBytes,
-		numRangeKeys: numRangeKeys,
-	})
-	defer eng.Close()
+func BenchmarkMVCCComputeStats_Pebble(b *testing.B) {
+	skip.UnderShort(b)
+	defer log.Scope(b).Close(b)
+	ctx := context.Background()
+	for _, valueSize := range []int{8, 32, 256} {
+		b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
+			for _, numRangeKeys := range []int{0, 1, 100} {
+				b.Run(fmt.Sprintf("numRangeKeys=%d", numRangeKeys), func(b *testing.B) {
+					const rangeBytes = 64 * 1024 * 1024
+					numKeys := rangeBytes / (overhead + valueSize)
+					eng := getInitialConditionsEngine(ctx, b, mvccBenchConfig{
+						inMemory:     false,
+						numVersions:  1,
+						numKeys:      numKeys,
+						valueBytes:   valueSize,
+						numRangeKeys: numRangeKeys,
+					})
+					defer eng.Close()
 
-	b.SetBytes(rangeBytes)
-	b.ResetTimer()
+					b.SetBytes(rangeBytes)
+					b.ResetTimer()
 
-	var stats enginepb.MVCCStats
-	var err error
-	for i := 0; i < b.N; i++ {
-		stats, err = ComputeStats(eng, keys.LocalMax, keys.MaxKey, 0)
-		if err != nil {
-			b.Fatal(err)
-		}
+					var stats enginepb.MVCCStats
+					var err error
+					for i := 0; i < b.N; i++ {
+						stats, err = ComputeStats(eng, keys.LocalMax, keys.MaxKey, 0)
+						if err != nil {
+							b.Fatal(err)
+						}
+					}
+					b.StopTimer()
+					log.Infof(ctx, "live_bytes: %d", stats.LiveBytes)
+				})
+			}
+		})
 	}
-
-	b.StopTimer()
-	log.Infof(ctx, "live_bytes: %d", stats.LiveBytes)
 }
 
-// runMVCCCFindSplitKey benchmarks MVCCFindSplitKey on a 64MB range of data.
-func runMVCCFindSplitKey(ctx context.Context, b *testing.B, emk engineMaker, valueBytes int) {
-	const rangeBytes = 64 * 1024 * 1024
-	numKeys := rangeBytes / (overhead + valueBytes)
-	eng, _ := setupMVCCData(ctx, b, emk, benchDataOptions{
-		numVersions: 1,
-		numKeys:     numKeys,
-		valueBytes:  valueBytes,
-	})
-	defer eng.Close()
+func BenchmarkMVCCFindSplitKey_Pebble(b *testing.B) {
+	defer log.Scope(b).Close(b)
+	ctx := context.Background()
+	for _, valueSize := range []int{32} {
+		b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
+			const rangeBytes = 64 * 1024 * 1024
+			numKeys := rangeBytes / (overhead + valueSize)
 
-	b.SetBytes(rangeBytes)
-	b.ResetTimer()
+			eng := getInitialConditionsEngine(ctx, b, mvccBenchConfig{
+				inMemory:    false,
+				numVersions: 1,
+				numKeys:     numKeys,
+				valueBytes:  valueSize,
+			})
+			defer eng.Close()
 
-	var err error
-	for i := 0; i < b.N; i++ {
-		_, err = MVCCFindSplitKey(ctx, eng, roachpb.RKeyMin,
-			roachpb.RKeyMax, rangeBytes/2)
-		if err != nil {
-			b.Fatal(err)
-		}
+			b.SetBytes(rangeBytes)
+			b.ResetTimer()
+
+			var err error
+			for i := 0; i < b.N; i++ {
+				_, err = MVCCFindSplitKey(ctx, eng, roachpb.RKeyMin,
+					roachpb.RKeyMax, rangeBytes/2)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+
+			b.StopTimer()
+		})
 	}
-
-	b.StopTimer()
 }
 
 type benchGarbageCollectOptions struct {
-	benchDataOptions
+	mvccBenchConfig
 	keyBytes       int
 	deleteVersions int
 	updateStats    bool
@@ -2041,6 +2074,129 @@ func runSSTIterator(b *testing.B, variant string, numKeys int, verify bool) {
 			_ = iter.UnsafeValue()
 		}
 	}
+}
+
+type initialConditions interface {
+	Key() []string
+	InMemory() bool
+	ConfigOptions() []ConfigOption
+	Build(context.Context, *testing.B, Engine) error
+}
+
+func defineInitialConditions(
+	key []string,
+	inMemory bool,
+	buildFunc func(context.Context, *testing.B, Engine) error,
+	opts ...ConfigOption,
+) initialConditions {
+	return simpleInitialConditions{
+		key:       key,
+		inMemory:  inMemory,
+		buildFunc: buildFunc,
+		opts:      opts,
+	}
+}
+
+type simpleInitialConditions struct {
+	key       []string
+	inMemory  bool
+	buildFunc func(context.Context, *testing.B, Engine) error
+	opts      []ConfigOption
+}
+
+func (ic simpleInitialConditions) Key() []string                 { return ic.key }
+func (ic simpleInitialConditions) InMemory() bool                { return ic.inMemory }
+func (ic simpleInitialConditions) ConfigOptions() []ConfigOption { return ic.opts }
+func (ic simpleInitialConditions) Build(ctx context.Context, b *testing.B, e Engine) error {
+	return ic.buildFunc(ctx, b, e)
+}
+
+type reopenableEngine struct {
+	Engine
+	loc  Location
+	opts []ConfigOption
+}
+
+func (re reopenableEngine) Reopen(ctx context.Context) (err error) {
+	re.Engine, err = Open(ctx, re.loc, re.opts...)
+	return err
+}
+
+func getInitialConditionsEngine(ctx context.Context, b *testing.B, initial initialConditions) reopenableEngine {
+	const initialConditionsDir = `seed-data`
+
+	require.NoError(b, os.MkdirAll(initialConditionsDir, os.ModePerm))
+	dir := filepath.Join(append([]string{initialConditionsDir}, initial.Key()...)...)
+
+	var buildFS *vfs.MemFS
+	if _, err := os.Stat(dir); oserror.IsNotExist(err) {
+		// There's no existing engine directory for these initial condtions.
+		// Produce it.
+		b.Logf("dir %q does not exist; building initial conditions first", dir)
+		buildFS = buildInitialConditions(ctx, b, initial, dir)
+	} else if err != nil {
+		b.Fatal(err)
+	}
+
+	opts := append([]ConfigOption{MustExist}, initial.ConfigOptions()...)
+
+	if !initial.InMemory() {
+		// The specification calls for a durable engine. Copy the seed data to a
+		// temporary directory on the filesystem.
+		testRunDir := b.TempDir()
+		ok, err := vfs.Clone(vfs.Default, vfs.Default, dir, testRunDir, vfs.CloneSync)
+		require.NoError(b, err)
+		require.True(b, ok)
+
+		// Load all the files into the OS buffer cache for better determinism.
+		testutils.ReadAllFiles(filepath.Join(testRunDir, "*"))
+
+		opts = append(opts, MustExist)
+		loc := Filesystem(testRunDir)
+		e, err := Open(ctx, loc, opts...)
+		require.NoError(b, err)
+		return reopenableEngine{Engine: e, loc: loc, opts: opts}
+	}
+
+	var fs vfs.FS
+
+	// If the initial conditions call for an in-memory engine and we just built
+	// the initial conditions using an in-memory filesystem, use the existing
+	// filesystem already ready.
+	if buildFS != nil {
+		fs = buildFS
+	} else {
+		// Load the initial conditions off the filesystem.
+		fs = vfs.NewMem()
+		ok, err := vfs.Clone(vfs.Default, fs, dir, "")
+		require.NoError(b, err)
+		require.True(b, ok)
+	}
+
+	loc := Location{fs: fs}
+	e, err := Open(ctx, loc, opts...)
+	require.NoError(b, err)
+	return reopenableEngine{Engine: e, loc: loc, opts: opts}
+}
+
+func buildInitialConditions(ctx context.Context, b *testing.B, initial initialConditions, dir string) (buildFS *vfs.MemFS) {
+	require.NoError(b, os.MkdirAll(dir, os.ModePerm))
+
+	// Regardless of whether the initial conditions specify an in-memory engine
+	// or not, we build the conditions using an in-memory engine for
+	// performance.
+	buildFS = vfs.NewMem()
+	var err error
+	e, err := Open(ctx, Location{fs: buildFS}, initial.ConfigOptions()...)
+	require.NoError(b, err)
+
+	require.NoError(b, initial.Build(ctx, b, e))
+	e.Close()
+
+	ok, err := vfs.Clone(buildFS, vfs.Default, "", dir, vfs.CloneSync)
+	require.NoError(b, err)
+	require.True(b, ok)
+	return buildFS
 }
 
 var benchRowColMap catalog.TableColMap
