@@ -43,6 +43,35 @@ func DecodeTenantPrefix(key roachpb.Key) ([]byte, roachpb.TenantID, error) {
 	return rem, roachpb.MustMakeTenantID(tenID), nil
 }
 
+// GetSQLPrefixLength ...
+func GetSQLPrefixLength(k []byte) int {
+	l := len(k)
+	if l == 0 || k[0] == 0x01 {
+		return 0
+	}
+	// TODO(jackson): Consider manually inlining GetUvarintLen. This will be
+	// used on a VERY hot path.
+	p := 0
+	if k[p] == tenantPrefixByte {
+		tenantIDLen, err := encoding.GetUvarintLen(k[p+1:])
+		if err != nil {
+			return 0
+		}
+		p += tenantIDLen + 1
+	}
+	tableIDLen, err := encoding.GetUvarintLen(k[p:])
+	if err != nil {
+		return 0
+	}
+	p += tableIDLen
+	indexIDLen, err := encoding.GetUvarintLen(k[p:])
+	if err != nil {
+		return 0
+	}
+	p += indexIDLen
+	return p
+}
+
 // DecodeTenantPrefixE determines the tenant ID from the key prefix, returning
 // the remainder of the key (with the prefix removed) and the decoded tenant ID.
 // Unlike DecodeTenantPrefix, it returns an error rather than panicking if the

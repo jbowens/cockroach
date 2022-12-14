@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // PrettyScanner implements  a partial right inverse to keys.PrettyPrint(): it
@@ -36,29 +37,37 @@ type PrettyScanner struct {
 	validateRoundTrip bool
 }
 
+// PrettyScanExt may be passed to MakePrettyScan to override the keyspace
+// indicated by Name with the provided parser implementation.
+type PrettyScanExt struct {
+	Name      redact.SafeString
+	ParseFunc keys.KeyParserFunc
+}
+
 // MakePrettyScanner creates a PrettyScanner.
 //
-// If tableParser is not nil, it will replace the default function for scanning
-// pretty-printed keys from the table part of the keys space (i.e. inputs
-// starting with "/Table"). The supplied function needs to parse the part that
-// comes after "/Table".
-func MakePrettyScanner(tableParser keys.KeyParserFunc) PrettyScanner {
+// Takes a variadic list of regions to overwrite with the provided parse
+// functions. For example, a PrettyScanExt with Name = "/Table" will replace the
+// default function for scanning pretty-printed keys from the table part of the
+// keys space (i.e. inputs starting with "/Table"). The supplied function needs
+// to parse the part that comes after "/Table".
+func MakePrettyScanner(exts ...PrettyScanExt) PrettyScanner {
 	dict := keys.KeyDict
-	if tableParser != nil {
-		dict = customizeKeyComprehension(dict, tableParser)
+	if len(exts) > 0 {
+		dict = customizeKeyComprehension(dict, exts)
 	}
 	return PrettyScanner{
 		keyComprehension: dict,
 		// If we specified a custom parser, forget about the roundtrip.
-		validateRoundTrip: tableParser == nil,
+		validateRoundTrip: len(exts) == 0,
 	}
 }
 
 // customizeKeyComprehension takes as input a KeyComprehensionTable and
-// overwrites the "pretty scanner" function for the tables key space (i.e. for
-// keys starting with "/Table"). The modified table is returned.
+// overwrites the "pretty scanner" function for the provided regions. The
+// modified table is returned.
 func customizeKeyComprehension(
-	table keys.KeyComprehensionTable, tableParser keys.KeyParserFunc,
+	table keys.KeyComprehensionTable, exts []PrettyScanExt,
 ) keys.KeyComprehensionTable {
 	// Make a deep copy of the table.
 	cpy := make(keys.KeyComprehensionTable, len(table))
@@ -69,20 +78,33 @@ func customizeKeyComprehension(
 	}
 	table = cpy
 
-	// Find the part of the table that deals with parsing table data.
-	// We'll perform surgery on it to apply `tableParser`.
+	extsMap := map[redact.SafeString]PrettyScanExt{}
+	for _, ext := range exts {
+		extsMap[ext.Name] = ext
+	}
+
+	// Find all the part of the table that deals with parsing table data, both
+	// including system tenant and secondary tenant table data. We'll perform
+	// surgery on them to apply `tableParser`.
 	for i := range table {
 		region := &table[i]
-		if region.Name == "/Table" {
+		if ext, ok := extsMap[region.Name]; ok {
 			if len(region.Entries) != 1 {
-				panic(fmt.Sprintf("expected a single entry under \"/Table\", got: %d", len(region.Entries)))
+				panic(fmt.Sprintf("expected a single entry under %q, got: %d", region.Name, len(region.Entries)))
 			}
 			subRegion := &region.Entries[0]
-			subRegion.PSFunc = tableParser
-			return table
+			subRegion.PSFunc = ext.ParseFunc
+			delete(extsMap, region.Name)
 		}
 	}
-	panic("failed to find required \"/Table\" entry")
+	if len(extsMap) > 0 {
+		var unfound []string
+		for name := range extsMap {
+			unfound = append(unfound, fmt.Sprintf("%q", name))
+		}
+		panic("failed to find required entry for regions: " + strings.Join(unfound, ", "))
+	}
+	return table
 }
 
 // Scan is a partial right inverse to PrettyPrint: it takes a key formatted for

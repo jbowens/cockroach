@@ -45,3 +45,31 @@ func TestRewriteKeyToTenantPrefix(t *testing.T) {
 		})
 	}
 }
+
+func TestGetSQLPrefixLen(t *testing.T) {
+	for _, tc := range []struct {
+		key  roachpb.Key
+		want int
+	}{
+		{StoreIdentKey(), 0},
+		{LocalPrefix, 0},
+		{SystemSQLCodec.IndexPrefix(5, 2), len(SystemSQLCodec.IndexPrefix(5, 2))},
+		{
+			append(SystemSQLCodec.IndexPrefix(5, 2), "foobar"...),
+			len(SystemSQLCodec.IndexPrefix(5, 2)),
+		},
+		{
+			MakeSQLCodec(roachpb.TenantID{53}).IndexPrefix(2, 1),
+			len(MakeSQLCodec(roachpb.TenantID{53}).IndexPrefix(2, 1)),
+		},
+		{
+			append(MakeSQLCodec(roachpb.TenantID{53}).IndexPrefix(2, 1), "baxbazboo"...),
+			len(MakeSQLCodec(roachpb.TenantID{53}).IndexPrefix(2, 1)),
+		},
+	} {
+		t.Run(fmt.Sprint(tc.key), func(t *testing.T) {
+			got := GetSQLPrefixLength(tc.key)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}

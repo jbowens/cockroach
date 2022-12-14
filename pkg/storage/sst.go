@@ -116,6 +116,14 @@ func CheckSSTConflicts(
 		rightPeekBound = keys.MaxKey
 	}
 
+	var sqlPrefix []byte
+	if sl := keys.GetSQLPrefixLength(start.Key); sl > 0 {
+		el := keys.GetSQLPrefixLength(end.Key)
+		if bytes.Equal(start.Key[:sl], end.Key[:el]) {
+			sqlPrefix = start.Key[:sl]
+		}
+	}
+
 	// In some iterations below, we try to call Next() instead of SeekGE() for a
 	// few iterations, as nexts are more performant. If `numNextsBeforeSeek` nexts
 	// are not sufficient to land at or after a desired SeekGE key, we fall back to
@@ -131,6 +139,7 @@ func CheckSSTConflicts(
 		nonPrefixIter := reader.NewMVCCIterator(MVCCKeyAndIntentsIterKind, IterOptions{
 			KeyTypes:   IterKeyTypePointsAndRanges,
 			UpperBound: end.Key,
+			SQLPrefix:  sqlPrefix,
 		})
 		nonPrefixIter.SeekGE(start)
 		valid, err := nonPrefixIter.Valid()
@@ -168,6 +177,7 @@ func CheckSSTConflicts(
 	rkIter = reader.NewMVCCIterator(MVCCKeyIterKind, IterOptions{
 		UpperBound: rightPeekBound,
 		KeyTypes:   IterKeyTypeRangesOnly,
+		SQLPrefix:  sqlPrefix,
 	})
 	rkIter.SeekGE(start)
 
@@ -202,6 +212,7 @@ func CheckSSTConflicts(
 		// GCBytesAge calculation.
 		RangeKeyMaskingBelow: sstTimestamp,
 		Prefix:               usePrefixSeek,
+		SQLPrefix:            sqlPrefix,
 		useL6Filters:         true,
 	})
 	defer extIter.Close()

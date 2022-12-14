@@ -379,7 +379,7 @@ func raftLogFromPendingDescriptorUpdate(
 }
 
 func parsePrettyKey(t *testing.T, pretty string) roachpb.RKey {
-	scanner := keysutil.MakePrettyScanner(nil /* tableParser */)
+	scanner := keysutil.MakePrettyScanner()
 	key, err := scanner.Scan(pretty)
 	if err != nil {
 		t.Fatalf("failed to parse key %s: %v", pretty, err)

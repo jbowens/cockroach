@@ -453,6 +453,8 @@ type IterOptions struct {
 	// Range keys themselves are not affected by the masking, and will be
 	// emitted as normal.
 	RangeKeyMaskingBelow hlc.Timestamp
+	// SQLPrefix ...
+	SQLPrefix []byte
 	// useL6Filters allows the caller to opt into reading filter blocks for
 	// L6 sstables. Only for use with Prefix = true. Helpful if a lot of prefix
 	// Seeks are expected in quick succession, that are also likely to not
