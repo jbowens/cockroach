@@ -10,6 +10,7 @@ go_library(
         "//pkg/keys",
         "//pkg/roachpb",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 

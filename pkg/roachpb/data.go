@@ -47,7 +47,7 @@ import (
 )
 
 const (
-	localPrefixByte = '\x01'
+	LocalPrefixByte = '\x01'
 	// LocalMaxByte is the end of the local key range.
 	LocalMaxByte = '\x02'
 	// PrevishKeyLength is a reasonable key length to use for Key.Prevish(),
@@ -69,7 +69,7 @@ var (
 	KeyMax = Key(RKeyMax)
 
 	// LocalPrefix is the prefix for all local keys.
-	LocalPrefix = Key{localPrefixByte}
+	LocalPrefix = Key{LocalPrefixByte}
 	// LocalMax is the end of the local key range. It is itself a global key.
 	LocalMax = Key{LocalMaxByte}
 

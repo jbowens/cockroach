@@ -30,9 +30,12 @@ import (
 func MakePrettyScannerForNamedTables(
 	tableNameToID map[string]int, idxNameToID map[string]int,
 ) keysutil.PrettyScanner {
-	return keysutil.MakePrettyScanner(func(input string) (string, roachpb.Key) {
-		remainder, k := parseTableKeysAsAscendingInts(input, tableNameToID, idxNameToID)
-		return remainder, k
+	return keysutil.MakePrettyScanner(keysutil.PrettyScanExt{
+		Name: "/Table",
+		ParseFunc: func(input string) (string, roachpb.Key) {
+			remainder, k := parseTableKeysAsAscendingInts(input, tableNameToID, idxNameToID)
+			return remainder, k
+		},
 	})
 }
 

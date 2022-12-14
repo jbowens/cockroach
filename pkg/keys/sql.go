@@ -12,6 +12,7 @@ package keys
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -41,6 +42,59 @@ func DecodeTenantPrefix(key roachpb.Key) ([]byte, roachpb.TenantID, error) {
 		return nil, roachpb.TenantID{}, err
 	}
 	return rem, roachpb.MustMakeTenantID(tenID), nil
+}
+
+// GetRootPrefixLength ...
+func GetRootPrefixLength(k []byte) int {
+	l := len(k)
+	if l == 0 {
+		return 0
+	}
+
+	// TODO(jackson): Consider manually inlining GetUvarintLen calls. This will
+	// be used on a vert hot path.
+
+	p := 0
+	switch k[0] {
+	case roachpb.LocalPrefixByte:
+		// Include the next byte that determines the subsection of the local
+		// keyspace.
+		p = 2
+	case meta1PrefixByte:
+		p = 1
+	case meta2PrefixByte:
+		p = 1
+	case systemPrefixByte:
+		p = 1
+	case tenantPrefixByte:
+		// Tenant SQL MVCC key.
+		tenantIDLen, err := encoding.GetUvarintLen(k[p+1:])
+		if err != nil {
+			return 0
+		}
+		p += tenantIDLen + 1
+		// Fallthrough to interpreting the remainder as a SQL MVCC key.
+		fallthrough
+	default:
+		fmt.Printf("k = %x\n", k)
+		if k[p] < TableDataMin[0] || k[p] >= TableDataMax[0] {
+			fmt.Printf("%x is not a valid table data key\n", k)
+			return 0
+		}
+		// SQL MVCC key; include the table and index.
+		tableIDLen, err := encoding.GetUvarintLen(k[p:])
+		if err != nil {
+			return 0
+		}
+		fmt.Printf("decode tableIDLen = %d\n", tableIDLen)
+		p += tableIDLen
+		indexIDLen, err := encoding.GetUvarintLen(k[p:])
+		if err != nil {
+			return 0
+		}
+		p += indexIDLen
+	}
+	return p
 }
 
 // DecodeTenantPrefixE determines the tenant ID from the key prefix, returning

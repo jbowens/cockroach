@@ -231,7 +231,7 @@ func localStoreKeyParse(input string) (remainder string, output roachpb.Key) {
 
 const strTable = "/Table/"
 
-func tenantKeyParse(input string) (remainder string, output roachpb.Key) {
+func TenantKeyParse(input string) (remainder string, output roachpb.Key) {
 	input = mustShiftSlash(input)
 	slashPos := strings.Index(input, "/")
 	if slashPos < 0 {
@@ -247,13 +247,13 @@ func tenantKeyParse(input string) (remainder string, output roachpb.Key) {
 	if strings.HasPrefix(remainder, strTable) {
 		var indexKey roachpb.Key
 		remainder = remainder[len(strTable)-1:]
-		remainder, indexKey = tableKeyParse(remainder)
+		remainder, indexKey = TableKeyParse(remainder)
 		output = append(output, indexKey...)
 	}
 	return remainder, output
 }
 
-func tableKeyParse(input string) (remainder string, output roachpb.Key) {
+func TableKeyParse(input string) (remainder string, output roachpb.Key) {
 	input = mustShiftSlash(input)
 	slashPos := strings.Index(input, "/")
 	if slashPos < 0 {
@@ -825,10 +825,10 @@ func init() {
 			{Name: "", prefix: nil, ppFunc: decodeKeyPrint, PSFunc: parseUnsupported},
 		}},
 		{Name: "/Table", start: TableDataMin, end: TableDataMax, Entries: []DictEntry{
-			{Name: "", prefix: nil, ppFunc: decodeKeyPrint, PSFunc: tableKeyParse, sfFunc: formatTableKey},
+			{Name: "", prefix: nil, ppFunc: decodeKeyPrint, PSFunc: TableKeyParse, sfFunc: formatTableKey},
 		}},
 		{Name: "/Tenant", start: TenantTableDataMin, end: TenantTableDataMax, Entries: []DictEntry{
-			{Name: "", prefix: nil, ppFunc: tenantKeyPrint, PSFunc: tenantKeyParse, sfFunc: formatTenantKey},
+			{Name: "", prefix: nil, ppFunc: tenantKeyPrint, PSFunc: TenantKeyParse, sfFunc: formatTenantKey},
 		}},
 	}
 }

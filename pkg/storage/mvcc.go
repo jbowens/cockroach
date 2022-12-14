@@ -995,6 +995,15 @@ func newMVCCIterator(
 		opts.RangeKeyMaskingBelow.IsEmpty() {
 		opts.RangeKeyMaskingBelow = timestamp
 	}
+	if opts.SQLPrefix == nil && opts.LowerBound != nil && opts.UpperBound != nil {
+		if l := keys.GetSQLPrefixLength(opts.LowerBound); l > 0 {
+			if opts.LowerBound[:l].IsPrev(opts.UpperBound) {
+				opts.SQLPrefix = opts.LowerBound[:l]
+			} else if ul := keys.GetSQLPrefixLength(opts.UpperBound); bytes.Equal(opts.LowerBound[:l], opts.UpperBound[:ul]) {
+				opts.SQLPrefix = opts.LowerBound[:l]
+			}
+		}
+	}
 	iterKind := MVCCKeyAndIntentsIterKind
 	if noInterleavedIntents {
 		iterKind = MVCCKeyIterKind
@@ -1067,11 +1076,16 @@ func MVCCGetWithValueHeader(
 		}
 		return result, enginepb.MVCCValueHeader{}, nil
 	}
+	iterOpts := IterOptions{
+		KeyTypes: IterKeyTypePointsAndRanges,
+		Prefix:   true,
+	}
+	if l := keys.GetSQLPrefixLength(key); l > 0 {
+		iterOpts.SQLPrefix = key[:l]
+	}
+
 	iter := newMVCCIterator(
-		reader, timestamp, false /* rangeKeyMasking */, opts.DontInterleaveIntents, IterOptions{
-			KeyTypes: IterKeyTypePointsAndRanges,
-			Prefix:   true,
-		},
+		reader, timestamp, false /* rangeKeyMasking */, opts.DontInterleaveIntents, iterOpts,
 	)
 	defer iter.Close()
 	value, intent, vh, err := mvccGetWithValueHeader(ctx, iter, key, timestamp, opts)
@@ -3969,12 +3983,13 @@ func MVCCScan(
 	timestamp hlc.Timestamp,
 	opts MVCCScanOptions,
 ) (MVCCScanResult, error) {
+	iterOpts := IterOptions{
+		KeyTypes:   IterKeyTypePointsAndRanges,
+		LowerBound: key,
+		UpperBound: endKey,
+	}
 	iter := newMVCCIterator(
-		reader, timestamp, !opts.Tombstones, opts.DontInterleaveIntents, IterOptions{
-			KeyTypes:   IterKeyTypePointsAndRanges,
-			LowerBound: key,
-			UpperBound: endKey,
-		},
+		reader, timestamp, !opts.Tombstones, opts.DontInterleaveIntents, iterOpts,
 	)
 	defer iter.Close()
 	return mvccScanToKvs(ctx, iter, key, endKey, timestamp, opts)

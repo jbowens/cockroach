@@ -1,0 +1,143 @@
+# A change in table ID should be considered a new prefix.
+
+data-block
+/Table/51/1/apple
+/Table/51/1/banana
+/Table/51/1/cantelope
+/Table/52/1/cantelope
+----
+/Table/51/1
+/Table/52/1
+
+data-block
+/Table/52/2/artichoke
+/Table/52/2/carrot
+----
+
+finish-table
+----
+/Table/51/1
+/Table/52/1
+/Table/52/2
+
+# A change in tenant ID should be considered a new prefix.
+
+data-block
+/Tenant/3/Table/51/1/apple
+/Tenant/3/Table/51/1/banana
+/Tenant/5/Table/51/1/cantelope
+----
+/Tenant/3/Table/51/1
+/Tenant/5/Table/51/1
+
+finish-table
+----
+/Tenant/3/Table/51/1
+/Tenant/5/Table/51/1
+
+# A sstable that only contains keys with the same SQL prefix should not encode
+# any properties at any level.
+
+data-block
+/Table/51/1/248581762302092281/"1101ddb2-ee03-465a-a6c5-e0b23c03707d"/503874
+/Table/51/1/3/503874
+/Table/51/1/5/503874
+----
+
+data-block
+/Table/51/1/8/50
+/Table/51/1/8/51
+/Table/51/1/9/1
+----
+
+finish-table
+----
+
+# A sstable that contains a change in index within a block should encode both
+# indexes in properties.
+
+data-block
+/Table/51/1/apple
+/Table/51/1/banana
+----
+
+data-block
+/Table/51/1/cantelope
+/Table/51/2/artichoke
+/Table/51/2/carrot
+----
+/Table/51/1
+/Table/51/2
+
+finish-table
+----
+/Table/51/1
+/Table/51/2
+
+# A sstable that contains a change in index at a block boundary should not
+# encode anything at the block level.
+
+data-block
+/Table/51/1/apple
+/Table/51/1/banana
+/Table/51/1/cantelope
+----
+
+data-block
+/Table/51/2/artichoke
+/Table/51/2/carrot
+----
+
+finish-table
+----
+/Table/51/1
+/Table/51/2
+
+# Test max property lengths:
+# - A data block or sstable that contains too many SQL prefixes to concisely
+#   represent should omit the property.
+# - Omitting the table-level property should not prevent data blocks from
+#   including their own block properties.
+
+data-block
+/Table/51/1/apple
+/Table/52/3/banana
+/Table/59/4/orange
+----
+/Table/51/1
+/Table/52/3
+/Table/59/4
+
+data-block
+/Table/59/9/orange
+/Table/60/1/foo
+/Table/60/1/bar
+/Table/60/1/bax
+/Table/60/2/boop
+----
+/Table/59/9
+/Table/60/1
+/Table/60/2
+
+data-block
+/Table/4294967295/4294967295/artichoke
+/Tenant/20520/Table/25/2/artichoke
+/Tenant/20520/Table/25/3/artichoke
+/Tenant/20520/Table/25/4/artichoke
+/Tenant/18446744073709551615/Table/4294967295/10000/long-prefix
+/Tenant/18446744073709551615/Table/4294967295/10001/long-prefix
+/Tenant/18446744073709551615/Table/4294967295/10002/long-prefix
+/Tenant/18446744073709551615/Table/4294967295/10003/long-prefix
+/Tenant/18446744073709551615/Table/4294967295/10004/long-prefix
+/Tenant/18446744073709551615/Table/4294967295/4294967295/long-prefix
+----
+
+data-block
+/Tenant/18446744073709551615/Table/4294967295/4294967294/long-prefix
+/Tenant/18446744073709551615/Table/4294967295/4294967295/long-prefix
+----
+/Tenant/18446744073709551615/Table/4294967295/4294967294
+/Tenant/18446744073709551615/Table/4294967295/4294967295
+
+finish-table
+----
