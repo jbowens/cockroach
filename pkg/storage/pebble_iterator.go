@@ -42,8 +42,8 @@ type pebbleIterator struct {
 	upperBoundBuf      []byte
 	rangeKeyMaskingBuf []byte
 	// Filter to use if masking is enabled.
-	maskFilter      mvccWallTimeIntervalRangeKeyMask
-	sqlPrefixFilter sqlPrefixFilter
+	maskFilter       mvccWallTimeIntervalRangeKeyMask
+	rootPrefixFilter rootPrefixFilter
 
 	// Buffer used to store MVCCRangeKeyVersions returned by RangeKeys(). Lazily
 	// initialized the first time an iterator's RangeKeys() method is called.
@@ -300,8 +300,8 @@ func (p *pebbleIterator) setOptions(opts IterOptions, durability DurabilityRequi
 	}
 
 	if opts.SQLPrefix != nil {
-		p.sqlPrefixFilter.SQLPrefix = opts.SQLPrefix
-		p.options.PointKeyFilters = append(p.options.PointKeyFilters, &p.sqlPrefixFilter)
+		p.rootPrefixFilter.RootPrefix = opts.RootPrefix
+		p.options.PointKeyFilters = append(p.options.PointKeyFilters, &p.rootPrefixFilter)
 	}
 
 	// Set the new iterator options. We unconditionally do so, since Pebble will

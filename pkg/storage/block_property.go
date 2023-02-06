@@ -20,10 +20,10 @@ import (
 	"github.com/cockroachdb/pebble"
 )
 
-const maxSQLPrefixPropertyLength = 60
-const sqlPrefixBlockPropertyName = "crdb.sqlprefix"
+const maxRootPrefixPropertyLength = 60
+const rootPrefixBlockPropertyName = "crdb.rootprfx"
 
-type sqlPrefixCollector struct {
+type rootPrefixCollector struct {
 	current               []byte
 	dataPrefixes          []byte
 	tablePrefixes         []byte
@@ -32,21 +32,21 @@ type sqlPrefixCollector struct {
 	dataBlockContinuation bool
 }
 
-// Assert that sqlPrefixCollector implements Pebble's BlockPropertyCollector
+// Assert that rootPrefixCollector implements Pebble's BlockPropertyCollector
 // interface.
-var _ pebble.BlockPropertyCollector = (*sqlPrefixCollector)(nil)
+var _ pebble.BlockPropertyCollector = (*rootPrefixCollector)(nil)
 
-var sqlPrefixCollectorPool = sync.Pool{
-	New: func() any { return new(sqlPrefixCollector) },
+var rootPrefixCollectorPool = sync.Pool{
+	New: func() any { return new(rootPrefixCollector) },
 }
 
-func newSQLPrefixCollector() pebble.BlockPropertyCollector {
-	return sqlPrefixCollectorPool.Get().(*sqlPrefixCollector)
+func newrootPrefixCollector() pebble.BlockPropertyCollector {
+	return rootPrefixCollectorPool.Get().(*rootPrefixCollector)
 }
 
 // Name returns the name of the block property collector.
-func (c *sqlPrefixCollector) Name() string {
-	return sqlPrefixBlockPropertyName
+func (c *rootPrefixCollector) Name() string {
+	return rootPrefixBlockPropertyName
 }
 
 // TODO(jackson): It'd be nice if the block-property collector could receive
@@ -61,7 +61,7 @@ func (c *sqlPrefixCollector) Name() string {
 
 // Add is called with each new entry added to a data block in the sstable.
 // The callee can assume that these are in sorted order.
-func (c *sqlPrefixCollector) Add(key pebble.InternalKey, value []byte) error {
+func (c *rootPrefixCollector) Add(key pebble.InternalKey, value []byte) error {
 	if len(c.current) > 0 && bytes.HasPrefix(key.UserKey, c.current) {
 		// Same prefix.
 		c.dataBlockContinuation = true
@@ -69,7 +69,7 @@ func (c *sqlPrefixCollector) Add(key pebble.InternalKey, value []byte) error {
 	}
 
 	// A new SQL prefix.
-	l := keys.GetSQLPrefixLength(key.UserKey)
+	l := keys.GetrootPrefixLength(key.UserKey)
 	if l > math.MaxUint8 {
 		// This SQL prefix length has a length beyond what will fit within a
 		// byte. This should never happen in practice; the Cockroach SQL
@@ -104,7 +104,7 @@ func (c *sqlPrefixCollector) Add(key pebble.InternalKey, value []byte) error {
 	}
 
 	// This is not the first SQL prefix within the block.
-	if len(c.current)+1+len(c.dataPrefixes)+1+l > maxSQLPrefixPropertyLength {
+	if len(c.current)+1+len(c.dataPrefixes)+1+l > maxrootPrefixPropertyLength {
 		// The final data block's property will exceed the maximum length. Don't
 		// bother saving the previous SQL prefix, and mark that we won't be
 		// encoding a property. If the data block's encoded properties exceed
@@ -128,9 +128,9 @@ func (c *sqlPrefixCollector) Add(key pebble.InternalKey, value []byte) error {
 // FinishDataBlock is called when all the entries have been added to a
 // data block. Subsequent Add calls will be for the next data block. It
 // returns the property value for the finished block.
-func (c *sqlPrefixCollector) FinishDataBlock(buf []byte) ([]byte, error) {
+func (c *rootPrefixCollector) FinishDataBlock(buf []byte) ([]byte, error) {
 	if !c.omitTableProperty {
-		if len(c.tablePrefixes)+len(c.dataPrefixes)+1+len(c.current) > maxSQLPrefixPropertyLength {
+		if len(c.tablePrefixes)+len(c.dataPrefixes)+1+len(c.current) > maxrootPrefixPropertyLength {
 			// The encoded prefixes at the sstable-level are too long. We won't
 			// encode a table-level property for this table.
 			c.omitTableProperty = true
@@ -159,21 +159,21 @@ func (c *sqlPrefixCollector) FinishDataBlock(buf []byte) ([]byte, error) {
 
 // AddPrevDataBlockToIndexBlock adds the entry corresponding to the
 // previous FinishDataBlock to the current index block.
-func (c *sqlPrefixCollector) AddPrevDataBlockToIndexBlock() {
+func (c *rootPrefixCollector) AddPrevDataBlockToIndexBlock() {
 	// Not encoded for index blocks.
 }
 
 // FinishIndexBlock is called when an index block, containing all the
 // key-value pairs since the last FinishIndexBlock, will no longer see new
 // entries. It returns the property value for the index block.
-func (c *sqlPrefixCollector) FinishIndexBlock(buf []byte) ([]byte, error) {
+func (c *rootPrefixCollector) FinishIndexBlock(buf []byte) ([]byte, error) {
 	// Not encoded for index blocks.
 	return nil, nil
 }
 
 // FinishTable is called when the sstable is finished, and returns the
 // property value for the sstable.
-func (c *sqlPrefixCollector) FinishTable(buf []byte) ([]byte, error) {
+func (c *rootPrefixCollector) FinishTable(buf []byte) ([]byte, error) {
 	if !c.omitTableProperty {
 		// Only output a property for the table if we'd already accumulated at
 		// least 1 prefix in table prefixes. This indicates that there was a
@@ -182,7 +182,7 @@ func (c *sqlPrefixCollector) FinishTable(buf []byte) ([]byte, error) {
 		//
 		// NB: the length of the resulting property has already been checked;
 		// omitTableProperty would be set to true if this property exceeds
-		// maxSQLPrefixPropertyLength.
+		// maxrootPrefixPropertyLength.
 		if len(c.tablePrefixes) > 0 {
 			buf = append(buf, c.tablePrefixes...)
 			if len(c.current) > 0 {
@@ -192,31 +192,31 @@ func (c *sqlPrefixCollector) FinishTable(buf []byte) ([]byte, error) {
 		}
 	}
 
-	*c = sqlPrefixCollector{
+	*c = rootPrefixCollector{
 		current:       c.current[:0],
 		dataPrefixes:  c.dataPrefixes[:0],
 		tablePrefixes: c.tablePrefixes[:0],
 	}
-	sqlPrefixCollectorPool.Put(c)
+	rootPrefixCollectorPool.Put(c)
 	return buf, nil
 }
 
-type sqlPrefixFilter struct {
-	SQLPrefix []byte
+type rootPrefixFilter struct {
+	rootPrefix []byte
 }
 
-// Assert that sqlPrefixFilter implements Pebble's BlockPropertyFilter
+// Assert that rootPrefixFilter implements Pebble's BlockPropertyFilter
 // interface.
-var _ pebble.BlockPropertyFilter = (*sqlPrefixFilter)(nil)
+var _ pebble.BlockPropertyFilter = (*rootPrefixFilter)(nil)
 
 // Name returns the name of the property to read.
-func (f *sqlPrefixFilter) Name() string {
-	return sqlPrefixBlockPropertyName
+func (f *rootPrefixFilter) Name() string {
+	return rootPrefixBlockPropertyName
 }
 
 // Intersects returns true if the set represented by prop intersects with
 // the set in the filter.
-func (f *sqlPrefixFilter) Intersects(prop []byte) (bool, error) {
+func (f *rootPrefixFilter) Intersects(prop []byte) (bool, error) {
 	// An empty property is unconstrained. An empty property may be encoded when
 	// all of a block or sstable's keys share the same SQL prefix, so the
 	// ordinary user key seeking should be sufficient. The collector may also
@@ -231,9 +231,9 @@ func (f *sqlPrefixFilter) Intersects(prop []byte) (bool, error) {
 		n := int(prop[i])
 		if n > l-i-1 {
 			return false, errors.Newf("unable to decode %q property; prefix length (%d) longer than remainder of the property (%d)",
-				sqlPrefixBlockPropertyName, n, l-i-1)
+				rootPrefixBlockPropertyName, n, l-i-1)
 		}
-		if bytes.Equal(f.SQLPrefix, prop[i+1:i+1+n]) {
+		if bytes.Equal(f.rootPrefix, prop[i+1:i+1+n]) {
 			return true, nil
 		}
 		i = i + 1 + n

@@ -528,7 +528,7 @@ var PebbleBlockPropertyCollectors = []func() pebble.BlockPropertyCollector{
 			&pebbleDataBlockMVCCTimeIntervalRangeCollector{},
 		)
 	},
-	newSQLPrefixCollector,
+	newRootPrefixCollector,
 }
 
 // DefaultPebbleOptions returns the default pebble options.
