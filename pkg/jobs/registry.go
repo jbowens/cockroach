@@ -582,6 +582,8 @@ func (r *Registry) CreateJobWithTxn(
 		}
 		insertStmt := fmt.Sprintf(`INSERT INTO system.jobs (%s) VALUES (%s)`,
 			strings.Join(cols[:numCols], ","), placeholders())
+		fmt.Printf("============= INSERTING INTO SYSTEM JOBS ==============\n")
+		defer fmt.Printf("============= DONE INSERTING INTO SYSTEM JOBS ==============\n")
 		_, err = txn.ExecEx(
 			ctx, "job-row-insert", txn.KV(),
 			override,

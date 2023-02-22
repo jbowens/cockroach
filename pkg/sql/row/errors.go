@@ -13,6 +13,7 @@ package row
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -123,7 +124,7 @@ func NewUniquenessConstraintViolationError(
 	// Exclude implicit partitioning columns and hash sharded index columns from
 	// the error message.
 	skipCols := index.ExplicitColumnStartIdx()
-	return errors.WithDetail(
+	ret := errors.WithDetail(
 		pgerror.WithConstraintName(pgerror.Newf(pgcode.UniqueViolation,
 			"duplicate key value violates unique constraint %q", indexName,
 		), indexName),
@@ -133,6 +134,9 @@ func NewUniquenessConstraintViolationError(
 			strings.Join(values[skipCols:], ","),
 		),
 	)
+	fmt.Printf("  RETURNING UNIQUE CONSTRAINT VIOLATION: %s: key = %q\n", ret, key)
+	debug.PrintStack()
+	return ret
 }
 
 // decodeKeyValsUsingSpec decodes an index key and returns the key column names

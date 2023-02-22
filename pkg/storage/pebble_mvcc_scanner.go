@@ -14,6 +14,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"fmt"
 	"sort"
 	"sync"
 
@@ -553,6 +554,31 @@ func (p *pebbleMVCCScanner) get(ctx context.Context) {
 		}
 	}
 	p.maybeFailOnMoreRecent()
+
+	defer func() {
+		if r := recover(); r != nil {
+			var valid bool
+			var err error
+			var key MVCCKey
+			var value []byte
+			var stack MVCCRangeKeyStack
+			valid, err = p.parent.Valid()
+			if valid {
+				hasPoint, hasRange := p.parent.HasPointAndRange()
+				key = p.parent.UnsafeKey()
+				if hasPoint {
+					value, err = p.parent.UnsafeValue()
+				}
+				if hasRange {
+					stack = p.parent.RangeKeys()
+				}
+			}
+			fmt.Printf("recovered panic; before re-throwing it, let's look at the current iter state: valid=%t, err=%q, key=%q, value=%q, stack=%s\n", valid, err, key, value, stack)
+
+			panic(r)
+		}
+	}()
+
 	// Unlike scans, if tombstones are enabled, we synthesize point tombstones for
 	// MVCC range tombstones even if there is no existing point key below it.
 	// These are often needed for e.g. conflict checks.
@@ -765,6 +791,7 @@ func (p *pebbleMVCCScanner) uncertaintyError(
 // The scanner must be positioned on a point key, possibly with an overlapping
 // range key. Range keys are processed separately in processRangeKeys().
 func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
+	p.curRangeKeys.AssertNotMangled()
 	if !p.curUnsafeKey.Timestamp.IsEmpty() {
 		// Range key where read ts >= range key ts >= point key ts. Synthesize a
 		// point tombstone for it. Range key conflict checks are done in
@@ -1461,16 +1488,19 @@ func (p *pebbleMVCCScanner) processRangeKeys(seeked bool, reverse bool) bool {
 	// Look for new range keys to process, and step across bare range keys until
 	// we land on a point key (or exhaust the iterator).
 	for {
+		//fmt.Printf("    processRangeKeys[p.parent.UnsafeKey()=%q](seeked=%t, reverse=%t)\n", p.parent.UnsafeKey(), seeked, reverse)
 		// In the forward direction, we can only land on a bare range key when
 		// RangeKeyChanged fires (at its start bound) or when we SeekGE within it.
 		rangeKeyChanged := p.parent.RangeKeyChanged()
 		if !rangeKeyChanged && !reverse && !seeked {
+			//fmt.Printf("      !rangeKeyChanged; returning\n")
 			return true
 		}
 
 		// We fast-path the common no-range-key case.
 		hasPoint, hasRange := p.parent.HasPointAndRange()
 		if !hasRange {
+			//fmt.Printf("      !hasRange; returning with cleared curRangeKeys\n")
 			p.curRangeKeys = MVCCRangeKeyStack{}
 			return true
 		}
@@ -1480,6 +1510,7 @@ func (p *pebbleMVCCScanner) processRangeKeys(seeked bool, reverse bool) bool {
 		// RangeKeyChanged won't fire -- we handle that case here as well.
 		if rangeKeyChanged || (seeked && p.curRangeKeys.IsEmpty()) {
 			p.curRangeKeys = p.parent.RangeKeys()
+			//fmt.Printf("      setting curRangeKeys = %#v\n", p.curRangeKeys)
 
 			// Check for conflicts with range keys at or above the read timestamp.
 			// We don't need to handle e.g. skipLocked, because range keys don't

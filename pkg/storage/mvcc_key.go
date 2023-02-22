@@ -503,6 +503,26 @@ type MVCCRangeKeyStack struct {
 	Versions MVCCRangeKeyVersions
 }
 
+func (s *MVCCRangeKeyStack) AssertNotMangled() {
+	assertNotAllZero(s.Bounds.Key)
+	assertNotAllZero(s.Bounds.EndKey)
+	for i := range s.Versions {
+		assertNotAllZero(s.Versions[i].Value)
+	}
+}
+
+func assertNotAllZero(b []byte) {
+	if len(b) == 0 {
+		return
+	}
+	for i := range b {
+		if b[i] != 0 {
+			return
+		}
+	}
+	panic(fmt.Sprintf("%x is all zero", b))
+}
+
 // MVCCRangeKeyVersions represents a stack of range key fragment versions.
 type MVCCRangeKeyVersions []MVCCRangeKeyVersion
 
@@ -544,6 +564,7 @@ func (s MVCCRangeKeyStack) AsRangeKeyValue(v MVCCRangeKeyVersion) MVCCRangeKeyVa
 // AsRangeKeyValues converts the stack into a slice of MVCCRangeKeyValue. Byte
 // slices are shared with the stack.
 func (s MVCCRangeKeyStack) AsRangeKeyValues() []MVCCRangeKeyValue {
+	s.AssertNotMangled()
 	kvs := make([]MVCCRangeKeyValue, 0, len(s.Versions))
 	for _, v := range s.Versions {
 		kvs = append(kvs, s.AsRangeKeyValue(v))
@@ -555,6 +576,7 @@ func (s MVCCRangeKeyStack) AsRangeKeyValues() []MVCCRangeKeyValue {
 // right-hand stack. The key bounds must touch exactly, i.e. the left-hand
 // EndKey must equal the right-hand Key.
 func (s MVCCRangeKeyStack) CanMergeRight(r MVCCRangeKeyStack) bool {
+	s.AssertNotMangled()
 	if s.IsEmpty() || s.Len() != r.Len() || !s.Bounds.EndKey.Equal(r.Bounds.Key) {
 		return false
 	}
@@ -576,6 +598,7 @@ func (s *MVCCRangeKeyStack) Clear() {
 
 // Clone clones the stack.
 func (s MVCCRangeKeyStack) Clone() MVCCRangeKeyStack {
+	s.AssertNotMangled()
 	s.Bounds = s.Bounds.Clone()
 	s.Versions = s.Versions.Clone()
 	return s
@@ -588,6 +611,7 @@ func (s MVCCRangeKeyStack) Clone() MVCCRangeKeyStack {
 // However, we currently expect the majority of range keys to have to have no
 // value, so we'll typically only make two allocations for the key bounds.
 func (s MVCCRangeKeyStack) CloneInto(c *MVCCRangeKeyStack) {
+	s.AssertNotMangled()
 	c.Bounds.Key = append(c.Bounds.Key[:0], s.Bounds.Key...)
 	c.Bounds.EndKey = append(c.Bounds.EndKey[:0], s.Bounds.EndKey...)
 	s.Versions.CloneInto(&c.Versions)
@@ -597,16 +621,19 @@ func (s MVCCRangeKeyStack) CloneInto(c *MVCCRangeKeyStack) {
 // A timestamp of 0 (i.e. an intent) is considered to be above all timestamps,
 // and thus not covered by any range key.
 func (s MVCCRangeKeyStack) Covers(k MVCCKey) bool {
+	s.AssertNotMangled()
 	return s.Versions.Covers(k.Timestamp) && s.Bounds.ContainsKey(k.Key)
 }
 
 // CoversTimestamp returns true if any range key in the stack covers the given timestamp.
 func (s MVCCRangeKeyStack) CoversTimestamp(ts hlc.Timestamp) bool {
+	s.AssertNotMangled()
 	return s.Versions.Covers(ts)
 }
 
 // Equal returns true if the range key stacks are equal.
 func (s MVCCRangeKeyStack) Equal(o MVCCRangeKeyStack) bool {
+	s.AssertNotMangled()
 	return s.Bounds.Equal(o.Bounds) && s.Versions.Equal(o.Versions)
 }
 
@@ -619,12 +646,14 @@ func (s *MVCCRangeKeyStack) Excise(from, to hlc.Timestamp) bool {
 // FirstAtOrAbove does a binary search for the first range key version at or
 // above the given timestamp. Returns false if no matching range key was found.
 func (s MVCCRangeKeyStack) FirstAtOrAbove(ts hlc.Timestamp) (MVCCRangeKeyVersion, bool) {
+	s.AssertNotMangled()
 	return s.Versions.FirstAtOrAbove(ts)
 }
 
 // FirstAtOrBelow does a binary search for the first range key version at or
 // below the given timestamp. Returns false if no matching range key was found.
 func (s MVCCRangeKeyStack) FirstAtOrBelow(ts hlc.Timestamp) (MVCCRangeKeyVersion, bool) {
+	s.AssertNotMangled()
 	return s.Versions.FirstAtOrBelow(ts)
 }
 
@@ -646,17 +675,20 @@ func (s MVCCRangeKeyStack) Len() int {
 
 // Newest returns the timestamp of the newest range key in the stack.
 func (s MVCCRangeKeyStack) Newest() hlc.Timestamp {
+	s.AssertNotMangled()
 	return s.Versions.Newest()
 }
 
 // Oldest returns the timestamp of the oldest range key in the stack.
 func (s MVCCRangeKeyStack) Oldest() hlc.Timestamp {
+	s.AssertNotMangled()
 	return s.Versions.Oldest()
 }
 
 // Remove removes the given version from the stack, returning true if it was
 // found.
 func (s *MVCCRangeKeyStack) Remove(ts hlc.Timestamp) (MVCCRangeKeyVersion, bool) {
+	s.AssertNotMangled()
 	return s.Versions.Remove(ts)
 }
 
@@ -667,6 +699,7 @@ func (s MVCCRangeKeyStack) String() string {
 
 // Timestamps returns the timestamps of all versions.
 func (s MVCCRangeKeyStack) Timestamps() []hlc.Timestamp {
+	s.AssertNotMangled()
 	return s.Versions.Timestamps()
 }
 
