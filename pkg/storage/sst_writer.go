@@ -13,7 +13,9 @@ package storage
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -29,6 +31,7 @@ type SSTWriter struct {
 	// DataSize tracks the total key and value bytes added so far.
 	DataSize int64
 	scratch  []byte
+	inflight int32
 
 	supportsRangeKeys bool // TODO(erikgrinaker): remove after 22.2
 }
@@ -118,6 +121,10 @@ func (fw *SSTWriter) Finish() error {
 	if fw.fw == nil {
 		return errors.New("cannot call Finish on a closed writer")
 	}
+	if v := atomic.AddInt32(&fw.inflight, 1); v > 1 {
+		panic(fmt.Sprintf("%d Close calls inflight"))
+	}
+	defer atomic.AddInt32(&fw.inflight, -1)
 	if err := fw.fw.Close(); err != nil {
 		return err
 	}
@@ -403,6 +410,10 @@ func (fw *SSTWriter) Close() {
 	if fw.fw == nil {
 		return
 	}
+	if v := atomic.AddInt32(&fw.inflight, 1); v > 1 {
+		panic(fmt.Sprintf("%d Close calls inflight"))
+	}
+	defer atomic.AddInt32(&fw.inflight, -1)
 	// pebble.Writer *does* return interesting errors from Close... but normally
 	// we already called its Close() in Finish() and we no-op here. Thus the only
 	// time we expect to be here is in a deferred Close(), in which case the caller
