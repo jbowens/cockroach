@@ -209,5 +209,149 @@ func queryTableSize(
 // tombstones. Point tombstones may slow reads, forcing wasted read I/O and
 // increasing CPU usage sifting through deleted keys.
 func registerPointTombstoneReadPerformance(r registry.Registry) {
+	r.Add(registry.TestSpec{
+		Name:              "point-tombstone/read-performance",
+		Owner:             registry.OwnerStorage,
+		Cluster:           r.MakeClusterSpec(5),
+		Benchmark:         true,
+		EncryptionSupport: registry.EncryptionAlwaysDisabled,
+		Timeout:           120 * time.Minute,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			startOpts := option.DefaultStartOpts()
+			startSettings := install.MakeClusterSettings()
+			startSettings.Env = append(startSettings.Env, "COCKROACH_AUTO_BALLAST=false")
 
+			t.Status("starting cluster")
+			c.Put(ctx, t.Cockroach(), "./cockroach")
+			c.Start(ctx, t.L(), startOpts, startSettings, c.Range(1, 3))
+
+			// Wait for upreplication.
+			conn := c.Conn(ctx, t.L(), 2)
+			defer conn.Close()
+			require.NoError(t, conn.PingContext(ctx))
+			require.NoError(t, WaitFor3XReplication(ctx, t, conn))
+
+			execSQLOrFail := func(statement string, args ...interface{}) {
+				if _, err := conn.ExecContext(ctx, statement, args...); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			c.Run(ctx, c.Node(4), `./cockroach workload init kv --db kv_a --splits 100 {pgurl:2}`)
+			c.Run(ctx, c.Node(4), `./cockroach workload init kv --db kv_b --splits 100 {pgurl:3}`)
+
+			// Run an initial kv0 load to seed the database.
+			// Note the use of --sequential. Using ordered keys will help us
+			// accumulate a prefix of point-deleted keys later on.
+			const targetLiveRows = 10_000_000
+			const deleteRows = 10_000_000
+			t.Status("starting initial kv insert workload")
+			m := c.NewMonitor(ctx, c.Range(1, 3))
+			m.Go(func(ctx context.Context) error {
+				// NB: We insert more rows into kv_a (targetLiveRows +
+				// deleteRows) because we will delete them. When we go to issue
+				// our scan queries, we want to number of logical rows in the
+				// both tables to be equal.
+				c.Run(ctx, c.Node(4), fmt.Sprintf(`./cockroach workload run kv --read-percent 0`+
+					` --concurrency 48 --sequential --batch 5`+
+					` --min-block-bytes=32 --max-block-bytes=32 --sequential`+
+					` --max-ops %d --db kv_a`+
+					` {pgurl:1-3}`, targetLiveRows+deleteRows))
+				return nil
+			})
+			m.Go(func(ctx context.Context) error {
+				c.Run(ctx, c.Node(5), fmt.Sprintf(`./cockroach workload run kv --read-percent 0`+
+					` --concurrency 48 --sequential --batch 5`+
+					` --min-block-bytes=32 --max-block-bytes=32 --sequential`+
+					` --max-ops %d --db kv_b`+
+					` {pgurl:1-3}`, targetLiveRows))
+				return nil
+			})
+			m.Wait()
+
+			// Delete the tail of kv_a's rows.
+			t.Status("deleting the tail of previously-written rows from kv_a")
+			m = c.NewMonitor(ctx, c.Range(1, 3))
+			m.Go(func(ctx context.Context) error {
+				n1Conn := c.Conn(ctx, t.L(), 1)
+				defer n1Conn.Close()
+				_, err := n1Conn.ExecContext(ctx, `USE kv_a;`)
+				require.NoError(t, err)
+
+				var paginationToken int64 = math.MinInt64
+				for done := false; !done; {
+					const deleteQuery = `
+					WITH deleted_keys AS (
+						DELETE FROM kv WHERE k < $1 AND k >= $2
+						ORDER BY k DESC LIMIT 10000 RETURNING k
+					)
+					SELECT min(k) FROM deleted_keys;
+					`
+					row := n1Conn.QueryRowContext(ctx, deleteQuery, paginationToken, targetLiveRows)
+					var nextToken gosql.NullInt64
+					require.NoError(t, row.Scan(&nextToken))
+					done = !nextToken.Valid
+					paginationToken = nextToken.Int64
+				}
+				return nil
+			})
+			m.Wait()
+
+			// Flatten the LSM across all three nodes. This leaves L0-L5 with
+			// very low compaction scores based on the ordinary LSM-shaping
+			// heuristics.
+			t.Status("compacting the LSMs")
+			m = c.NewMonitor(ctx, c.Range(1, 3))
+			m.Go(func(ctx context.Context) error {
+				execSQLOrFail("select crdb_internal.compact_engine_span(1, 1, decode('00', 'hex'), decode('FFFFFFFF', 'hex'))")
+				return nil
+			})
+			m.Go(func(ctx context.Context) error {
+				execSQLOrFail("select crdb_internal.compact_engine_span(2, 2, decode('00', 'hex'), decode('FFFFFFFF', 'hex'))")
+				return nil
+			})
+			m.Go(func(ctx context.Context) error {
+				execSQLOrFail("select crdb_internal.compact_engine_span(3, 3, decode('00', 'hex'), decode('FFFFFFFF', 'hex'))")
+				return nil
+			})
+			m.Wait()
+
+			// Set a low 1m GC ttl to trigger GC.
+			execSQLOrFail("alter database kv_a configure zone using gc.ttlseconds = $1", 60)
+			execSQLOrFail("alter database kv_b configure zone using gc.ttlseconds = $1", 60)
+
+			t.Status("waiting 2x the GC TTL")
+			// Wait 3x the GC TTL.
+			time.Sleep(3 * time.Minute)
+
+			// Launch two workloads scanning both of the tables, 500 rows at a
+			// time for 20m.
+			t.Status("running scan workload")
+			m = c.NewMonitor(ctx, c.Range(1, 3))
+			m.Go(func(ctx context.Context) error {
+				c.Run(ctx, c.Node(4), fmt.Sprintf(
+					`./cockroach workload run kv --read-percent 0 `+
+						` --concurrency 48 --tolerate-errors --sequential --duration 20m `+
+						` --min-block-bytes=32 --max-block-bytes=32 --sequential`+
+						` --span-percent 100 --span-limit 500 --write-seq S%d --db kv_a`+
+						` "--histograms=%s/stats.json"`+
+						` {pgurl:1-3}`, targetLiveRows+deleteRows, t.PerfArtifactsDir()))
+				return nil
+			})
+			// TODO(jackson): Only kv_a's histograms are reported through the
+			// primary stats.json benchmark. Add in kv_b, so it's easier to
+			// compare the two side-by-side on roachperf.
+			m.Go(func(ctx context.Context) error {
+				c.Run(ctx, c.Node(5), fmt.Sprintf(
+					`./cockroach workload run kv --read-percent 0 `+
+						` --concurrency 48 --tolerate-errors --sequential --duration 20m `+
+						` --min-block-bytes=32 --max-block-bytes=32 --sequential`+
+						` --span-percent 100 --span-limit 500 --write-seq S%d --db kv_b`+
+						` "--histograms=%s/stats_kv_b.json"`+
+						` {pgurl:1-3}`, targetLiveRows, t.PerfArtifactsDir()))
+				return nil
+			})
+			m.Wait()
+		},
+	})
 }
