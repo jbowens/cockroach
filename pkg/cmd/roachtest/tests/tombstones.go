@@ -26,8 +26,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// registerPointTombstone registers the point tombstone test.
-func registerPointTombstone(r registry.Registry) {
+// registerPointTombstoneHetereogeneousValues registers the hetereogeneous
+// value-size point tombstone test. This test exercises point tombstone
+// compaction heuristics to ensure that disk space is reclaimed even in the
+// presence of varied value sizes.
+func registerPointTombstoneHetereogeneousValues(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Skip: "pebble#2340",
 		SkipDetails: "This roachtest is implemented ahead of implementing and using " +
@@ -199,4 +202,12 @@ func queryTableSize(
 		&info.livePercentage,
 	))
 	return info
+}
+
+// registerPointTombstoneReadPerformance measures the performance of reads
+// within a keyspan that's had significant data removed through point
+// tombstones. Point tombstones may slow reads, forcing wasted read I/O and
+// increasing CPU usage sifting through deleted keys.
+func registerPointTombstoneReadPerformance(r registry.Registry) {
+
 }
