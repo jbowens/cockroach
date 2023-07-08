@@ -590,7 +590,7 @@ func (c *SyncedCluster) generateStartFlagsKV(node Node, startOpts StartOpts) []s
 			// for example it doesn't let one single out a specific node. We add
 			// nodeX-flavor attributes for that.
 			args = append(args, `--store`,
-				fmt.Sprintf(`path=%s,attrs=store%d:node%d:node%dstore%d`, storeDir, i, node, node, i))
+				fmt.Sprintf(`path=%s,attrs=store%d:node%d:node%dstore%d,pebble=[Options] min_deletion_rate=966367641600 mem_table_size=134217728 mem_table_stop_writes_threshold=6`, storeDir, i, node, node, i))
 		}
 	} else if startOpts.ExtraArgs[idx] == "--store=" {
 		// The flag and path were provided together. Strip the flag prefix.
