@@ -115,6 +115,7 @@ go_library(
         "npgsql.go",
         "npgsql_blocklist.go",
         "orm_helpers.go",
+        "overload.go",
         "parsing_helpers.go",
         "pebble_write_throughput.go",
         "pebble_ycsb.go",
