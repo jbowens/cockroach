@@ -97,6 +97,7 @@ func RegisterTests(r registry.Registry) {
 	registerNetworkLogging(r)
 	registerNodeJSPostgres(r)
 	registerNpgsql(r)
+	registerOverload(r)
 	registerPebbleWriteThroughput(r)
 	registerPebbleYCSB(r)
 	registerPgjdbc(r)
