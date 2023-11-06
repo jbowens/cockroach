@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/storage/pebbleiter"
@@ -751,6 +752,9 @@ type PebbleConfig struct {
 	base.StorageConfig
 	// Pebble specific options.
 	Opts *pebble.Options
+	// DiskMonitor configures a disk.Monitor that may be used to retrieve
+	// statistics about the underlying local physical storage.
+	DiskMonitor *disk.Monitor
 	// SharedStorage is a cloud.ExternalStorage that can be used by all Pebble
 	// stores on this node and on other nodes to store sstables.
 	SharedStorage cloud.ExternalStorage
@@ -803,6 +807,7 @@ type Pebble struct {
 	attrs        roachpb.Attributes
 	properties   roachpb.StoreProperties
 	settings     *cluster.Settings
+	diskMonitor  *disk.Monitor
 	encryption   *EncryptionEnv
 	fileLock     *pebble.Lock
 	fileRegistry *PebbleFileRegistry
@@ -1127,6 +1132,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 		attrs:            cfg.Attrs,
 		properties:       storeProps,
 		settings:         cfg.Settings,
+		diskMonitor:      cfg.DiskMonitor,
 		encryption:       encryptionEnv,
 		fileLock:         opts.Lock,
 		fileRegistry:     fileRegistry,

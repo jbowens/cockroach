@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -753,6 +754,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	if s := cfg.TestingKnobs.Store; s != nil {
 		storeKnobs = *s.(*kvserver.StoreTestingKnobs)
 	}
+	diskMonitoring := disk.NewMonitoring(vfs.Default)
 
 	for i, spec := range cfg.Stores.Specs {
 		log.Eventf(ctx, "initializing %+v", spec)
@@ -821,9 +823,14 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				return Engines{}, errors.Errorf("%f%% of %s's total free space is only %s bytes, which is below the minimum requirement of %s",
 					spec.Size.Percent, spec.Path, humanizeutil.IBytes(sizeInBytes), humanizeutil.IBytes(base.MinimumStoreSize))
 			}
+			diskMonitor, err := diskMonitoring.Monitor(ctx, spec.Path)
+			if err != nil {
+				return Engines{}, errors.Errorf("unable to open disk monitor for %s", spec.Path)
+			}
 
 			detail(redact.Sprintf("store %d: max size %s, max open file limit %d", i, humanizeutil.IBytes(sizeInBytes), openFileLimitPerStore))
 
+			addCfgOpt(storage.DiskMonitor(diskMonitor))
 			addCfgOpt(storage.MaxSize(sizeInBytes))
 			addCfgOpt(storage.BallastSize(storage.BallastSizeBytes(spec, du)))
 			addCfgOpt(storage.Caches(pebbleCache, tableCache))

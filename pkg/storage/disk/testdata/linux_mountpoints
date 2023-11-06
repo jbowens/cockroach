@@ -1,0 +1,356 @@
+parse
+24 1 8:1 / / rw,relatime shared:1 - ext4 /dev/root rw
+----
+Device 8:1 : ext4 on /dev/root at /
+
+# Example taken from a gceworker.
+
+parse
+24 1 8:1 / / rw,relatime shared:1 - ext4 /dev/root rw
+25 24 0:5 / /dev rw,relatime shared:2 - devtmpfs devtmpfs rw,size=16423340k,nr_inodes=4105835,mode=755,inode64
+26 24 0:22 / /sys rw,nosuid,nodev,noexec,relatime shared:5 - sysfs sysfs rw
+27 24 0:23 / /proc rw,nosuid,nodev,noexec,relatime shared:13 - proc proc rw
+28 26 0:6 / /sys/kernel/security rw,nosuid,nodev,noexec,relatime shared:6 - securityfs securityfs rw
+29 25 0:24 / /dev/shm rw,nosuid,nodev shared:3 - tmpfs tmpfs rw,inode64
+30 25 0:25 / /dev/pts rw,nosuid,noexec,relatime shared:4 - devpts devpts rw,gid=5,mode=620,ptmxmode=000
+31 24 0:26 / /run rw,nosuid,nodev shared:14 - tmpfs tmpfs rw,size=3285540k,mode=755,inode64
+32 31 0:27 / /run/lock rw,nosuid,nodev,noexec,relatime shared:15 - tmpfs tmpfs rw,size=5120k,inode64
+33 26 0:28 / /sys/fs/cgroup ro,nosuid,nodev,noexec shared:7 - tmpfs tmpfs ro,mode=755,inode64
+34 33 0:29 / /sys/fs/cgroup/unified rw,nosuid,nodev,noexec,relatime shared:8 - cgroup2 cgroup2 rw,nsdelegate
+35 33 0:30 / /sys/fs/cgroup/systemd rw,nosuid,nodev,noexec,relatime shared:9 - cgroup cgroup rw,xattr,name=systemd
+36 26 0:31 / /sys/fs/pstore rw,nosuid,nodev,noexec,relatime shared:10 - pstore pstore rw
+37 26 0:32 / /sys/firmware/efi/efivars rw,nosuid,nodev,noexec,relatime shared:11 - efivarfs efivarfs rw
+38 26 0:33 / /sys/fs/bpf rw,nosuid,nodev,noexec,relatime shared:12 - bpf bpf rw,mode=700
+39 33 0:34 / /sys/fs/cgroup/rdma rw,nosuid,nodev,noexec,relatime shared:16 - cgroup cgroup rw,rdma
+40 33 0:35 / /sys/fs/cgroup/cpu,cpuacct rw,nosuid,nodev,noexec,relatime shared:17 - cgroup cgroup rw,cpu,cpuacct
+41 33 0:36 / /sys/fs/cgroup/devices rw,nosuid,nodev,noexec,relatime shared:18 - cgroup cgroup rw,devices
+42 33 0:37 / /sys/fs/cgroup/blkio rw,nosuid,nodev,noexec,relatime shared:19 - cgroup cgroup rw,blkio
+43 33 0:38 / /sys/fs/cgroup/misc rw,nosuid,nodev,noexec,relatime shared:20 - cgroup cgroup rw,misc
+44 33 0:39 / /sys/fs/cgroup/pids rw,nosuid,nodev,noexec,relatime shared:21 - cgroup cgroup rw,pids
+45 33 0:40 / /sys/fs/cgroup/freezer rw,nosuid,nodev,noexec,relatime shared:22 - cgroup cgroup rw,freezer
+46 33 0:41 / /sys/fs/cgroup/cpuset rw,nosuid,nodev,noexec,relatime shared:23 - cgroup cgroup rw,cpuset
+47 33 0:42 / /sys/fs/cgroup/memory rw,nosuid,nodev,noexec,relatime shared:24 - cgroup cgroup rw,memory
+48 33 0:43 / /sys/fs/cgroup/net_cls,net_prio rw,nosuid,nodev,noexec,relatime shared:25 - cgroup cgroup rw,net_cls,net_prio
+49 33 0:44 / /sys/fs/cgroup/perf_event rw,nosuid,nodev,noexec,relatime shared:26 - cgroup cgroup rw,perf_event
+50 33 0:45 / /sys/fs/cgroup/hugetlb rw,nosuid,nodev,noexec,relatime shared:27 - cgroup cgroup rw,hugetlb
+51 27 0:46 / /proc/sys/fs/binfmt_misc rw,relatime shared:28 - autofs systemd-1 rw,fd=28,pgrp=1,timeout=0,minproto=5,maxproto=5,direct,pipe_ino=12817
+52 25 0:47 / /dev/hugepages rw,relatime shared:29 - hugetlbfs hugetlbfs rw,pagesize=2M
+53 25 0:20 / /dev/mqueue rw,nosuid,nodev,noexec,relatime shared:30 - mqueue mqueue rw
+54 26 0:7 / /sys/kernel/debug rw,nosuid,nodev,noexec,relatime shared:31 - debugfs debugfs rw
+55 26 0:12 / /sys/kernel/tracing rw,nosuid,nodev,noexec,relatime shared:32 - tracefs tracefs rw
+56 26 0:48 / /sys/fs/fuse/connections rw,nosuid,nodev,noexec,relatime shared:33 - fusectl fusectl rw
+57 26 0:21 / /sys/kernel/config rw,nosuid,nodev,noexec,relatime shared:34 - configfs configfs rw
+200 51 0:49 / /proc/sys/fs/binfmt_misc rw,nosuid,nodev,noexec,relatime shared:71 - binfmt_misc binfmt_misc rw
+129 24 7:0 / /snap/core20/2015 ro,nodev,relatime shared:73 - squashfs /dev/loop0 ro,errors=continue
+132 24 7:1 / /snap/core22/864 ro,nodev,relatime shared:75 - squashfs /dev/loop1 ro,errors=continue
+138 24 7:3 / /snap/go/10389 ro,nodev,relatime shared:79 - squashfs /dev/loop3 ro,errors=continue
+141 24 7:5 / /snap/snapd/20290 ro,nodev,relatime shared:81 - squashfs /dev/loop5 ro,errors=continue
+144 24 7:4 / /snap/google-cloud-cli/183 ro,nodev,relatime shared:83 - squashfs /dev/loop4 ro,errors=continue
+147 24 7:6 / /snap/snapd/20092 ro,nodev,relatime shared:85 - squashfs /dev/loop6 ro,errors=continue
+150 24 8:15 / /boot/efi rw,relatime shared:87 - vfat /dev/sda15 rw,fmask=0077,dmask=0077,codepage=437,iocharset=iso8859-1,shortname=mixed,errors=remount-ro
+153 24 7:7 / /snap/lxd/24061 ro,nodev,relatime shared:89 - squashfs /dev/loop7 ro,errors=continue
+156 24 7:8 / /snap/go/10376 ro,nodev,relatime shared:91 - squashfs /dev/loop8 ro,errors=continue
+797 31 0:26 /snapd/ns /run/snapd/ns rw,nosuid,nodev - tmpfs tmpfs rw,size=3285540k,mode=755,inode64
+819 797 0:4 mnt:[4026532774] /run/snapd/ns/lxd.mnt rw - nsfs nsfs rw
+579 31 0:54 / /run/user/1073 rw,nosuid,nodev,relatime shared:326 - tmpfs tmpfs rw,size=3285536k,mode=700,uid=1073,gid=1074,inode64
+596 24 7:9 / /snap/google-cloud-cli/189 ro,nodev,relatime shared:334 - squashfs /dev/loop9 ro,errors=continue
+----
+Device 8:1 : ext4 on /dev/root at /
+Device 0:5 : devtmpfs on devtmpfs at /dev
+Device 0:22 : sysfs on sysfs at /sys
+Device 0:23 : proc on proc at /proc
+Device 0:6 : securityfs on securityfs at /sys/kernel/security
+Device 0:24 : tmpfs on tmpfs at /dev/shm
+Device 0:25 : devpts on devpts at /dev/pts
+Device 0:26 : tmpfs on tmpfs at /run
+Device 0:27 : tmpfs on tmpfs at /run/lock
+Device 0:28 : tmpfs on tmpfs at /sys/fs/cgroup
+Device 0:29 : cgroup2 on cgroup2 at /sys/fs/cgroup/unified
+Device 0:30 : cgroup on cgroup at /sys/fs/cgroup/systemd
+Device 0:31 : pstore on pstore at /sys/fs/pstore
+Device 0:32 : efivarfs on efivarfs at /sys/firmware/efi/efivars
+Device 0:33 : bpf on bpf at /sys/fs/bpf
+Device 0:34 : cgroup on cgroup at /sys/fs/cgroup/rdma
+Device 0:35 : cgroup on cgroup at /sys/fs/cgroup/cpu,cpuacct
+Device 0:36 : cgroup on cgroup at /sys/fs/cgroup/devices
+Device 0:37 : cgroup on cgroup at /sys/fs/cgroup/blkio
+Device 0:38 : cgroup on cgroup at /sys/fs/cgroup/misc
+Device 0:39 : cgroup on cgroup at /sys/fs/cgroup/pids
+Device 0:40 : cgroup on cgroup at /sys/fs/cgroup/freezer
+Device 0:41 : cgroup on cgroup at /sys/fs/cgroup/cpuset
+Device 0:42 : cgroup on cgroup at /sys/fs/cgroup/memory
+Device 0:43 : cgroup on cgroup at /sys/fs/cgroup/net_cls,net_prio
+Device 0:44 : cgroup on cgroup at /sys/fs/cgroup/perf_event
+Device 0:45 : cgroup on cgroup at /sys/fs/cgroup/hugetlb
+Device 0:46 : autofs on systemd-1 at /proc/sys/fs/binfmt_misc
+Device 0:47 : hugetlbfs on hugetlbfs at /dev/hugepages
+Device 0:20 : mqueue on mqueue at /dev/mqueue
+Device 0:7 : debugfs on debugfs at /sys/kernel/debug
+Device 0:12 : tracefs on tracefs at /sys/kernel/tracing
+Device 0:48 : fusectl on fusectl at /sys/fs/fuse/connections
+Device 0:21 : configfs on configfs at /sys/kernel/config
+Device 0:49 : binfmt_misc on binfmt_misc at /proc/sys/fs/binfmt_misc
+Device 7:0 : squashfs on /dev/loop0 at /snap/core20/2015
+Device 7:1 : squashfs on /dev/loop1 at /snap/core22/864
+Device 7:3 : squashfs on /dev/loop3 at /snap/go/10389
+Device 7:5 : squashfs on /dev/loop5 at /snap/snapd/20290
+Device 7:4 : squashfs on /dev/loop4 at /snap/google-cloud-cli/183
+Device 7:6 : squashfs on /dev/loop6 at /snap/snapd/20092
+Device 8:15 : vfat on /dev/sda15 at /boot/efi
+Device 7:7 : squashfs on /dev/loop7 at /snap/lxd/24061
+Device 7:8 : squashfs on /dev/loop8 at /snap/go/10376
+Device 0:26 : tmpfs on tmpfs at /run/snapd/ns
+Device 0:4 : nsfs on nsfs at /run/snapd/ns/lxd.mnt
+Device 0:54 : tmpfs on tmpfs at /run/user/1073
+Device 7:9 : squashfs on /dev/loop9 at /snap/google-cloud-cli/189
+
+# Example taken from an AWS roachprod node.
+
+parse
+23 1 259:9 / / rw,relatime shared:1 - ext4 /dev/root rw,discard,errors=remount-ro
+24 23 0:5 / /dev rw,nosuid,noexec,relatime shared:2 - devtmpfs devtmpfs rw,size=32386532k,nr_inodes=8096633,mode=755,inode64
+25 23 0:21 / /proc rw,nosuid,nodev,noexec,relatime shared:5 - proc proc rw
+26 23 0:22 / /sys rw,nosuid,nodev,noexec,relatime shared:6 - sysfs sysfs rw
+27 26 0:6 / /sys/kernel/security rw,nosuid,nodev,noexec,relatime shared:7 - securityfs securityfs rw
+28 24 0:23 / /dev/shm rw,nosuid,nodev shared:3 - tmpfs tmpfs rw,inode64
+29 24 0:24 / /dev/pts rw,nosuid,noexec,relatime shared:4 - devpts devpts rw,gid=5,mode=620,ptmxmode=000
+30 23 0:25 / /run rw,nosuid,nodev shared:11 - tmpfs tmpfs rw,size=12957728k,nr_inodes=819200,mode=755,inode64
+31 30 0:26 / /run/lock rw,nosuid,nodev,noexec,relatime shared:12 - tmpfs tmpfs rw,size=5120k,inode64
+32 26 0:27 / /sys/fs/cgroup rw,nosuid,nodev,noexec,relatime shared:8 - cgroup2 cgroup2 rw,nsdelegate,memory_recursiveprot
+33 26 0:28 / /sys/fs/pstore rw,nosuid,nodev,noexec,relatime shared:9 - pstore pstore rw
+34 26 0:29 / /sys/fs/bpf rw,nosuid,nodev,noexec,relatime shared:10 - bpf bpf rw,mode=700
+36 25 0:30 / /proc/sys/fs/binfmt_misc rw,relatime shared:13 - autofs systemd-1 rw,fd=29,pgrp=1,timeout=0,minproto=5,maxproto=5,direct,pipe_ino=19959
+37 24 0:31 / /dev/hugepages rw,relatime shared:14 - hugetlbfs hugetlbfs rw,pagesize=2M
+38 24 0:19 / /dev/mqueue rw,nosuid,nodev,noexec,relatime shared:15 - mqueue mqueue rw
+39 26 0:7 / /sys/kernel/debug rw,nosuid,nodev,noexec,relatime shared:16 - debugfs debugfs rw
+40 26 0:12 / /sys/kernel/tracing rw,nosuid,nodev,noexec,relatime shared:17 - tracefs tracefs rw
+41 26 0:32 / /sys/fs/fuse/connections rw,nosuid,nodev,noexec,relatime shared:18 - fusectl fusectl rw
+42 26 0:20 / /sys/kernel/config rw,nosuid,nodev,noexec,relatime shared:19 - configfs configfs rw
+65 30 0:33 / /run/credentials/systemd-sysusers.service ro,nosuid,nodev,noexec,relatime shared:20 - ramfs ramfs rw,mode=700
+90 23 7:1 / /snap/core18/2790 ro,nodev,relatime shared:43 - squashfs /dev/loop1 ro,errors=continue,threads=single
+93 23 7:0 / /snap/amazon-ssm-agent/7628 ro,nodev,relatime shared:46 - squashfs /dev/loop0 ro,errors=continue,threads=single
+96 23 7:4 / /snap/snapd/20290 ro,nodev,relatime shared:48 - squashfs /dev/loop4 ro,errors=continue,threads=single
+99 23 7:2 / /snap/core20/2015 ro,nodev,relatime shared:50 - squashfs /dev/loop2 ro,errors=continue,threads=single
+102 23 7:3 / /snap/lxd/24322 ro,nodev,relatime shared:52 - squashfs /dev/loop3 ro,errors=continue,threads=single
+105 23 259:11 / /boot/efi rw,relatime shared:54 - vfat /dev/nvme0n1p15 rw,fmask=0077,dmask=0077,codepage=437,iocharset=iso8859-1,shortname=mixed,errors=remount-ro
+108 36 0:34 / /proc/sys/fs/binfmt_misc rw,nosuid,nodev,noexec,relatime shared:56 - binfmt_misc binfmt_misc rw
+508 30 0:25 /snapd/ns /run/snapd/ns rw,nosuid,nodev - tmpfs tmpfs rw,size=12957728k,nr_inodes=819200,mode=755,inode64
+529 508 0:4 mnt:[4026532484] /run/snapd/ns/lxd.mnt rw - nsfs nsfs rw
+435 23 259:2 / /mnt/data1 rw,relatime shared:186 - ext4 /dev/nvme1n1 rw
+450 23 259:0 / /mnt/data2 rw,relatime shared:245 - ext4 /dev/nvme2n1 rw
+465 23 259:8 / /mnt/data3 rw,relatime shared:252 - ext4 /dev/nvme3n1 rw
+480 23 259:5 / /mnt/data4 rw,relatime shared:259 - ext4 /dev/nvme4n1 rw
+495 23 259:6 / /mnt/data5 rw,relatime shared:266 - ext4 /dev/nvme5n1 rw
+530 23 259:7 / /mnt/data6 rw,relatime shared:273 - ext4 /dev/nvme6n1 rw
+555 23 259:3 / /mnt/data7 rw,relatime shared:280 - ext4 /dev/nvme7n1 rw
+625 23 259:4 / /mnt/data8 rw,relatime shared:293 - ext4 /dev/nvme8n1 rw
+265 30 0:40 / /run/user/1000 rw,nosuid,nodev,relatime shared:153 - tmpfs tmpfs rw,size=6478860k,nr_inodes=1619715,mode=700,uid=1000,gid=1000,inode64
+----
+Device 259:9 : ext4 on /dev/root at /
+Device 0:5 : devtmpfs on devtmpfs at /dev
+Device 0:21 : proc on proc at /proc
+Device 0:22 : sysfs on sysfs at /sys
+Device 0:6 : securityfs on securityfs at /sys/kernel/security
+Device 0:23 : tmpfs on tmpfs at /dev/shm
+Device 0:24 : devpts on devpts at /dev/pts
+Device 0:25 : tmpfs on tmpfs at /run
+Device 0:26 : tmpfs on tmpfs at /run/lock
+Device 0:27 : cgroup2 on cgroup2 at /sys/fs/cgroup
+Device 0:28 : pstore on pstore at /sys/fs/pstore
+Device 0:29 : bpf on bpf at /sys/fs/bpf
+Device 0:30 : autofs on systemd-1 at /proc/sys/fs/binfmt_misc
+Device 0:31 : hugetlbfs on hugetlbfs at /dev/hugepages
+Device 0:19 : mqueue on mqueue at /dev/mqueue
+Device 0:7 : debugfs on debugfs at /sys/kernel/debug
+Device 0:12 : tracefs on tracefs at /sys/kernel/tracing
+Device 0:32 : fusectl on fusectl at /sys/fs/fuse/connections
+Device 0:20 : configfs on configfs at /sys/kernel/config
+Device 0:33 : ramfs on ramfs at /run/credentials/systemd-sysusers.service
+Device 7:1 : squashfs on /dev/loop1 at /snap/core18/2790
+Device 7:0 : squashfs on /dev/loop0 at /snap/amazon-ssm-agent/7628
+Device 7:4 : squashfs on /dev/loop4 at /snap/snapd/20290
+Device 7:2 : squashfs on /dev/loop2 at /snap/core20/2015
+Device 7:3 : squashfs on /dev/loop3 at /snap/lxd/24322
+Device 259:11 : vfat on /dev/nvme0n1p15 at /boot/efi
+Device 0:34 : binfmt_misc on binfmt_misc at /proc/sys/fs/binfmt_misc
+Device 0:25 : tmpfs on tmpfs at /run/snapd/ns
+Device 0:4 : nsfs on nsfs at /run/snapd/ns/lxd.mnt
+Device 259:2 : ext4 on /dev/nvme1n1 at /mnt/data1
+Device 259:0 : ext4 on /dev/nvme2n1 at /mnt/data2
+Device 259:8 : ext4 on /dev/nvme3n1 at /mnt/data3
+Device 259:5 : ext4 on /dev/nvme4n1 at /mnt/data4
+Device 259:6 : ext4 on /dev/nvme5n1 at /mnt/data5
+Device 259:7 : ext4 on /dev/nvme6n1 at /mnt/data6
+Device 259:3 : ext4 on /dev/nvme7n1 at /mnt/data7
+Device 259:4 : ext4 on /dev/nvme8n1 at /mnt/data8
+Device 0:40 : tmpfs on tmpfs at /run/user/1000
+
+# Another example from a roachprod AWS node.
+
+parse
+23 1 259:2 / / rw,relatime shared:1 - ext4 /dev/root rw,discard,errors=remount-ro
+24 23 0:5 / /dev rw,nosuid,noexec,relatime shared:2 - devtmpfs devtmpfs rw,size=32386536k,nr_inodes=8096634,mode=755,inode64
+25 23 0:21 / /proc rw,nosuid,nodev,noexec,relatime shared:5 - proc proc rw
+26 23 0:22 / /sys rw,nosuid,nodev,noexec,relatime shared:6 - sysfs sysfs rw
+27 26 0:6 / /sys/kernel/security rw,nosuid,nodev,noexec,relatime shared:7 - securityfs securityfs rw
+28 24 0:23 / /dev/shm rw,nosuid,nodev shared:3 - tmpfs tmpfs rw,inode64
+29 24 0:24 / /dev/pts rw,nosuid,noexec,relatime shared:4 - devpts devpts rw,gid=5,mode=620,ptmxmode=000
+30 23 0:25 / /run rw,nosuid,nodev shared:11 - tmpfs tmpfs rw,size=12957728k,nr_inodes=819200,mode=755,inode64
+31 30 0:26 / /run/lock rw,nosuid,nodev,noexec,relatime shared:12 - tmpfs tmpfs rw,size=5120k,inode64
+32 26 0:27 / /sys/fs/cgroup rw,nosuid,nodev,noexec,relatime shared:8 - cgroup2 cgroup2 rw,nsdelegate,memory_recursiveprot
+33 26 0:28 / /sys/fs/pstore rw,nosuid,nodev,noexec,relatime shared:9 - pstore pstore rw
+34 26 0:29 / /sys/fs/bpf rw,nosuid,nodev,noexec,relatime shared:10 - bpf bpf rw,mode=700
+36 25 0:30 / /proc/sys/fs/binfmt_misc rw,relatime shared:13 - autofs systemd-1 rw,fd=29,pgrp=1,timeout=0,minproto=5,maxproto=5,direct,pipe_ino=18664
+37 24 0:31 / /dev/hugepages rw,relatime shared:14 - hugetlbfs hugetlbfs rw,pagesize=2M
+38 24 0:19 / /dev/mqueue rw,nosuid,nodev,noexec,relatime shared:15 - mqueue mqueue rw
+39 26 0:7 / /sys/kernel/debug rw,nosuid,nodev,noexec,relatime shared:16 - debugfs debugfs rw
+40 26 0:12 / /sys/kernel/tracing rw,nosuid,nodev,noexec,relatime shared:17 - tracefs tracefs rw
+41 26 0:32 / /sys/fs/fuse/connections rw,nosuid,nodev,noexec,relatime shared:18 - fusectl fusectl rw
+42 26 0:20 / /sys/kernel/config rw,nosuid,nodev,noexec,relatime shared:19 - configfs configfs rw
+65 30 0:33 / /run/credentials/systemd-sysusers.service ro,nosuid,nodev,noexec,relatime shared:20 - ramfs ramfs rw,mode=700
+90 23 7:1 / /snap/core18/2790 ro,nodev,relatime shared:43 - squashfs /dev/loop1 ro,errors=continue,threads=single
+93 23 7:2 / /snap/core20/2015 ro,nodev,relatime shared:46 - squashfs /dev/loop2 ro,errors=continue,threads=single
+96 23 7:0 / /snap/amazon-ssm-agent/7628 ro,nodev,relatime shared:48 - squashfs /dev/loop0 ro,errors=continue,threads=single
+99 23 7:4 / /snap/snapd/20290 ro,nodev,relatime shared:50 - squashfs /dev/loop4 ro,errors=continue,threads=single
+102 23 7:3 / /snap/lxd/24322 ro,nodev,relatime shared:52 - squashfs /dev/loop3 ro,errors=continue,threads=single
+105 23 259:4 / /boot/efi rw,relatime shared:54 - vfat /dev/nvme0n1p15 rw,fmask=0077,dmask=0077,codepage=437,iocharset=iso8859-1,shortname=mixed,errors=remount-ro
+108 36 0:34 / /proc/sys/fs/binfmt_misc rw,nosuid,nodev,noexec,relatime shared:56 - binfmt_misc binfmt_misc rw
+508 30 0:25 /snapd/ns /run/snapd/ns rw,nosuid,nodev - tmpfs tmpfs rw,size=12957728k,nr_inodes=819200,mode=755,inode64
+529 508 0:4 mnt:[4026532348] /run/snapd/ns/lxd.mnt rw - nsfs nsfs rw
+435 23 259:0 / /mnt/data1 rw,relatime shared:215 - ext4 /dev/nvme1n1 rw
+265 30 0:40 / /run/user/1000 rw,nosuid,nodev,relatime shared:153 - tmpfs tmpfs rw,size=6478860k,nr_inodes=1619715,mode=700,uid=1000,gid=1000,inode64
+----
+Device 259:2 : ext4 on /dev/root at /
+Device 0:5 : devtmpfs on devtmpfs at /dev
+Device 0:21 : proc on proc at /proc
+Device 0:22 : sysfs on sysfs at /sys
+Device 0:6 : securityfs on securityfs at /sys/kernel/security
+Device 0:23 : tmpfs on tmpfs at /dev/shm
+Device 0:24 : devpts on devpts at /dev/pts
+Device 0:25 : tmpfs on tmpfs at /run
+Device 0:26 : tmpfs on tmpfs at /run/lock
+Device 0:27 : cgroup2 on cgroup2 at /sys/fs/cgroup
+Device 0:28 : pstore on pstore at /sys/fs/pstore
+Device 0:29 : bpf on bpf at /sys/fs/bpf
+Device 0:30 : autofs on systemd-1 at /proc/sys/fs/binfmt_misc
+Device 0:31 : hugetlbfs on hugetlbfs at /dev/hugepages
+Device 0:19 : mqueue on mqueue at /dev/mqueue
+Device 0:7 : debugfs on debugfs at /sys/kernel/debug
+Device 0:12 : tracefs on tracefs at /sys/kernel/tracing
+Device 0:32 : fusectl on fusectl at /sys/fs/fuse/connections
+Device 0:20 : configfs on configfs at /sys/kernel/config
+Device 0:33 : ramfs on ramfs at /run/credentials/systemd-sysusers.service
+Device 7:1 : squashfs on /dev/loop1 at /snap/core18/2790
+Device 7:2 : squashfs on /dev/loop2 at /snap/core20/2015
+Device 7:0 : squashfs on /dev/loop0 at /snap/amazon-ssm-agent/7628
+Device 7:4 : squashfs on /dev/loop4 at /snap/snapd/20290
+Device 7:3 : squashfs on /dev/loop3 at /snap/lxd/24322
+Device 259:4 : vfat on /dev/nvme0n1p15 at /boot/efi
+Device 0:34 : binfmt_misc on binfmt_misc at /proc/sys/fs/binfmt_misc
+Device 0:25 : tmpfs on tmpfs at /run/snapd/ns
+Device 0:4 : nsfs on nsfs at /run/snapd/ns/lxd.mnt
+Device 259:0 : ext4 on /dev/nvme1n1 at /mnt/data1
+Device 0:40 : tmpfs on tmpfs at /run/user/1000
+
+# An example from a roachprod GCP node.
+
+parse
+24 1 8:1 / / rw,relatime shared:1 - ext4 /dev/root rw,discard,errors=remount-ro
+25 24 0:5 / /dev rw,nosuid,noexec,relatime shared:2 - devtmpfs devtmpfs rw,size=16446948k,nr_inodes=4111737,mode=755,inode64
+26 24 0:22 / /proc rw,nosuid,nodev,noexec,relatime shared:5 - proc proc rw
+27 24 0:23 / /sys rw,nosuid,nodev,noexec,relatime shared:6 - sysfs sysfs rw
+28 27 0:6 / /sys/kernel/security rw,nosuid,nodev,noexec,relatime shared:7 - securityfs securityfs rw
+29 25 0:24 / /dev/shm rw,nosuid,nodev shared:3 - tmpfs tmpfs rw,inode64
+30 25 0:25 / /dev/pts rw,nosuid,noexec,relatime shared:4 - devpts devpts rw,gid=5,mode=620,ptmxmode=000
+31 24 0:26 / /run rw,nosuid,nodev shared:12 - tmpfs tmpfs rw,size=6580420k,nr_inodes=819200,mode=755,inode64
+32 31 0:27 / /run/lock rw,nosuid,nodev,noexec,relatime shared:13 - tmpfs tmpfs rw,size=5120k,inode64
+33 27 0:28 / /sys/fs/cgroup rw,nosuid,nodev,noexec,relatime shared:8 - cgroup2 cgroup2 rw,nsdelegate,memory_recursiveprot
+34 27 0:29 / /sys/fs/pstore rw,nosuid,nodev,noexec,relatime shared:9 - pstore pstore rw
+35 27 0:30 / /sys/firmware/efi/efivars rw,nosuid,nodev,noexec,relatime shared:10 - efivarfs efivarfs rw
+36 27 0:31 / /sys/fs/bpf rw,nosuid,nodev,noexec,relatime shared:11 - bpf bpf rw,mode=700
+38 26 0:32 / /proc/sys/fs/binfmt_misc rw,relatime shared:14 - autofs systemd-1 rw,fd=29,pgrp=1,timeout=0,minproto=5,maxproto=5,direct,pipe_ino=20521
+39 25 0:33 / /dev/hugepages rw,relatime shared:15 - hugetlbfs hugetlbfs rw,pagesize=2M
+40 25 0:20 / /dev/mqueue rw,nosuid,nodev,noexec,relatime shared:16 - mqueue mqueue rw
+41 27 0:7 / /sys/kernel/debug rw,nosuid,nodev,noexec,relatime shared:17 - debugfs debugfs rw
+42 27 0:12 / /sys/kernel/tracing rw,nosuid,nodev,noexec,relatime shared:18 - tracefs tracefs rw
+43 27 0:34 / /sys/fs/fuse/connections rw,nosuid,nodev,noexec,relatime shared:19 - fusectl fusectl rw
+44 27 0:21 / /sys/kernel/config rw,nosuid,nodev,noexec,relatime shared:20 - configfs configfs rw
+68 31 0:35 / /run/credentials/systemd-sysusers.service ro,nosuid,nodev,noexec,relatime shared:21 - ramfs ramfs rw,mode=700
+94 24 7:0 / /snap/core20/1974 ro,nodev,relatime shared:45 - squashfs /dev/loop0 ro,errors=continue
+97 24 7:1 / /snap/google-cloud-cli/157 ro,nodev,relatime shared:48 - squashfs /dev/loop1 ro,errors=continue
+100 24 7:2 / /snap/lxd/24322 ro,nodev,relatime shared:50 - squashfs /dev/loop2 ro,errors=continue
+103 24 7:3 / /snap/snapd/19457 ro,nodev,relatime shared:52 - squashfs /dev/loop3 ro,errors=continue
+106 24 8:15 / /boot/efi rw,relatime shared:54 - vfat /dev/sda15 rw,fmask=0077,dmask=0077,codepage=437,iocharset=iso8859-1,shortname=mixed,errors=remount-ro
+37 38 0:36 / /proc/sys/fs/binfmt_misc rw,nosuid,nodev,noexec,relatime shared:46 - binfmt_misc binfmt_misc rw
+377 31 0:26 /snapd/ns /run/snapd/ns rw,nosuid,nodev - tmpfs tmpfs rw,size=6580420k,nr_inodes=819200,mode=755,inode64
+394 377 0:4 mnt:[4026532940] /run/snapd/ns/lxd.mnt rw - nsfs nsfs rw
+609 24 259:0 / /mnt/data1 rw,relatime shared:154 - ext4 /dev/nvme0n1 rw,nobarrier
+626 24 259:1 / /mnt/data2 rw,relatime shared:312 - ext4 /dev/nvme0n2 rw,nobarrier
+643 24 259:2 / /mnt/data3 rw,relatime shared:320 - ext4 /dev/nvme0n3 rw,nobarrier
+395 24 259:3 / /mnt/data4 rw,relatime shared:188 - ext4 /dev/nvme0n4 rw,nobarrier
+422 31 0:44 / /run/user/1000 rw,nosuid,nodev,relatime shared:155 - tmpfs tmpfs rw,size=3290208k,nr_inodes=822552,mode=700,uid=1000,gid=1000,inode64
+----
+Device 8:1 : ext4 on /dev/root at /
+Device 0:5 : devtmpfs on devtmpfs at /dev
+Device 0:22 : proc on proc at /proc
+Device 0:23 : sysfs on sysfs at /sys
+Device 0:6 : securityfs on securityfs at /sys/kernel/security
+Device 0:24 : tmpfs on tmpfs at /dev/shm
+Device 0:25 : devpts on devpts at /dev/pts
+Device 0:26 : tmpfs on tmpfs at /run
+Device 0:27 : tmpfs on tmpfs at /run/lock
+Device 0:28 : cgroup2 on cgroup2 at /sys/fs/cgroup
+Device 0:29 : pstore on pstore at /sys/fs/pstore
+Device 0:30 : efivarfs on efivarfs at /sys/firmware/efi/efivars
+Device 0:31 : bpf on bpf at /sys/fs/bpf
+Device 0:32 : autofs on systemd-1 at /proc/sys/fs/binfmt_misc
+Device 0:33 : hugetlbfs on hugetlbfs at /dev/hugepages
+Device 0:20 : mqueue on mqueue at /dev/mqueue
+Device 0:7 : debugfs on debugfs at /sys/kernel/debug
+Device 0:12 : tracefs on tracefs at /sys/kernel/tracing
+Device 0:34 : fusectl on fusectl at /sys/fs/fuse/connections
+Device 0:21 : configfs on configfs at /sys/kernel/config
+Device 0:35 : ramfs on ramfs at /run/credentials/systemd-sysusers.service
+Device 7:0 : squashfs on /dev/loop0 at /snap/core20/1974
+Device 7:1 : squashfs on /dev/loop1 at /snap/google-cloud-cli/157
+Device 7:2 : squashfs on /dev/loop2 at /snap/lxd/24322
+Device 7:3 : squashfs on /dev/loop3 at /snap/snapd/19457
+Device 8:15 : vfat on /dev/sda15 at /boot/efi
+Device 0:36 : binfmt_misc on binfmt_misc at /proc/sys/fs/binfmt_misc
+Device 0:26 : tmpfs on tmpfs at /run/snapd/ns
+Device 0:4 : nsfs on nsfs at /run/snapd/ns/lxd.mnt
+Device 259:0 : ext4 on /dev/nvme0n1 at /mnt/data1
+Device 259:1 : ext4 on /dev/nvme0n2 at /mnt/data2
+Device 259:2 : ext4 on /dev/nvme0n3 at /mnt/data3
+Device 259:3 : ext4 on /dev/nvme0n4 at /mnt/data4
+Device 0:44 : tmpfs on tmpfs at /run/user/1000
+
+parse
+609 24 259:0 / /mnt/data1 rw,relatime shared:154 - ext4 /dev/nvme0n1 rw,nobarrier
+----
+Device 259:0 : ext4 on /dev/nvme0n1 at /mnt/data1
+
+# Test a few error conditions as variants of the above.
+
+parse
+609 24 259: / /mnt/data1 rw,relatime shared:154 - ext4 /dev/nvme0n1 rw,nobarrier
+----
+/proc/self/mountinfo:0:: decoding deviceID minor from field "259:": strconv.ParseUint: parsing "": invalid syntax
+
+parse
+609 24 259:0 / /mnt/data1 rw,relatime shared:154 ext4 /dev/nvme0n1 rw,nobarrier
+----
+/proc/self/mountinfo:0:: no separator found
+
+parse
+609 24 259:0 / /mnt/data1 rw,relatime shared:154 - ext4 /dev/nvme0n1
+----
+/proc/self/mountinfo:0:: expected 3 fields after a optional separator; found 10
+
+# Test additional fields that we're not aware of. (An attempt at
+# future-proofing).
+
+parse
+609 24 259:0 / /mnt/data1 rw,relatime shared:154 - ext4 /dev/nvme0n1 rw,nobarrier some unknown garbage
+----
+Device 259:0 : ext4 on /dev/nvme0n1 at /mnt/data1

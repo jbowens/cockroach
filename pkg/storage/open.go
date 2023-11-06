@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
@@ -105,6 +106,15 @@ func BlockSize(size int) ConfigOption {
 			cfg.Opts.Levels[i].BlockSize = size
 			cfg.Opts.Levels[i].IndexBlockSize = size
 		}
+		return nil
+	}
+}
+
+// DiskMonitor sets the disk.Monitor that provides access for the underlying
+// disk's statistics and metadata.
+func DiskMonitor(m *disk.Monitor) ConfigOption {
+	return func(cfg *engineConfig) error {
+		cfg.DiskMonitor = m
 		return nil
 	}
 }
