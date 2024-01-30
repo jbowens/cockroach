@@ -704,21 +704,21 @@ func DefaultPebbleOptions() *pebble.Options {
 		// allow overriding the max at runtime through
 		// Engine.SetCompactionConcurrency.
 		MaxConcurrentCompactions:    getMaxConcurrentCompactions,
-		MemTableSize:                64 << 20, // 64 MB
+		MemTableSize:                256 << 20, // 256 MB
 		MemTableStopWritesThreshold: 4,
 		Merger:                      MVCCMerger,
 		BlockPropertyCollectors:     PebbleBlockPropertyCollectors,
 		FormatMajorVersion:          MinimumSupportedFormatVersion,
 	}
 	opts.Experimental.L0CompactionConcurrency = l0SubLevelCompactionConcurrency
-	// Automatically flush 10s after the first range tombstone is added to a
+	// Automatically flush 2m after the first range tombstone is added to a
 	// memtable. This ensures that we can reclaim space even when there's no
 	// activity on the database generating flushes.
-	opts.FlushDelayDeleteRange = 10 * time.Second
-	// Automatically flush 10s after the first range key is added to a memtable.
+	opts.FlushDelayDeleteRange = 2 * time.Minute
+	// Automatically flush 2m after the first range key is added to a memtable.
 	// This ensures that range keys are quickly flushed, allowing use of lazy
 	// combined iteration within Pebble.
-	opts.FlushDelayRangeKey = 10 * time.Second
+	opts.FlushDelayRangeKey = 2 * time.Minute
 	// Enable deletion pacing. This helps prevent disk slowness events on some
 	// SSDs, that kick off an expensive GC if a lot of files are deleted at
 	// once.
