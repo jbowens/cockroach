@@ -132,12 +132,15 @@ func (wb *writeBatch) clear(key MVCCKey, opts ClearOptions) error {
 	if len(key.Key) == 0 {
 		return emptyKeyError()
 	}
-
-	wb.buf = EncodeMVCCKeyToBuf(wb.buf[:0], key)
+	keyLen := encodedMVCCKeyLength(key)
+	var op *pebble.DeferredBatchOp
 	if !opts.ValueSizeKnown || !wb.mayWriteSizedDeletes {
-		return wb.batch.Delete(wb.buf, nil)
+		op = wb.batch.DeleteDeferred(keyLen)
+	} else {
+		op = wb.batch.DeleteSizedDeferred(keyLen, opts.ValueSize)
 	}
-	return wb.batch.DeleteSized(wb.buf, opts.ValueSize, nil)
+	encodeMVCCKeyToBuf(op.Key, key, keyLen)
+	return op.Finish()
 }
 
 // SingleClearEngineKey implements the Writer interface.
@@ -301,17 +304,24 @@ func (wb *writeBatch) PutEngineKey(key EngineKey, value []byte) error {
 	if len(key.Key) == 0 {
 		return emptyKeyError()
 	}
-	wb.buf = key.EncodeToBuf(wb.buf[:0])
-	return wb.batch.Set(wb.buf, value, nil)
+	keyLen := key.EncodedLen()
+	op := wb.batch.SetDeferred(keyLen, len(value))
+	key.encodeToSizedBuf(op.Key)
+	copy(op.Value, value)
+	return op.Finish()
 }
 
 func (wb *writeBatch) put(key MVCCKey, value []byte) error {
 	if len(key.Key) == 0 {
 		return emptyKeyError()
 	}
-
-	wb.buf = EncodeMVCCKeyToBuf(wb.buf[:0], key)
-	return wb.batch.Set(wb.buf, value, nil)
+	// TODO(jackson): Many callers can avoid serializing the value ahead of
+	// time and serialize directly into DeferredBatchOp.Value.
+	keyLen := encodedMVCCKeyLength(key)
+	op := wb.batch.SetDeferred(keyLen, len(value))
+	encodeMVCCKeyToBuf(op.Key, key, keyLen)
+	copy(op.Value, value)
+	return op.Finish()
 }
 
 // LogData implements the Writer interface.
