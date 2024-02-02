@@ -195,6 +195,40 @@ func EncodeMVCCValue(v MVCCValue) ([]byte, error) {
 	return buf, nil
 }
 
+// encodeMVCCValueToSizedBuf encodes the provided MVCC value into a buffer
+// that's been pre-sized to exactly fit the fit provided value.
+func encodeMVCCValueToSizedBuf(buf []byte, v MVCCValue) error {
+	// In the common case that there is no header, the length of the encoded
+	// value is the length of the value's raw bytes. The caller is required to
+	// appropriately size the buffer, so we can just check the buffer's length
+	// as a signal.
+	if len(buf) == len(v.Value.RawBytes) {
+		copy(buf, v.Value.RawBytes)
+		return nil
+	}
+
+	// Extended encoding. Wrap the roachpb.Value encoding with a header containing
+	// MVCC-level metadata. Requires a re-allocation and copy.
+	headerLen := v.MVCCValueHeader.Size()
+	headerSize := extendedPreludeSize + headerLen
+
+	// 4-byte-header-len
+	binary.BigEndian.PutUint32(buf, uint32(headerLen))
+	// 1-byte-sentinel
+	buf[tagPos] = extendedEncodingSentinel
+	// mvcc-header
+	//
+	// NOTE: we don't use protoutil to avoid passing v.MVCCValueHeader through
+	// an interface, which would cause a heap allocation and incur the cost of
+	// dynamic dispatch.
+	if _, err := v.MVCCValueHeader.MarshalToSizedBuffer(buf[extendedPreludeSize:headerSize]); err != nil {
+		return errors.Wrap(err, "marshaling MVCCValueHeader")
+	}
+	// <4-byte-checksum><1-byte-tag><encoded-data> or empty for tombstone
+	copy(buf[headerSize:], v.Value.RawBytes)
+	return nil
+}
+
 // DecodeMVCCValue decodes an MVCCKey from its Pebble representation.
 //
 // NOTE: this function does not inline, so it is not suitable for performance

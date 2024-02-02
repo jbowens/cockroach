@@ -138,6 +138,17 @@ func TestEncodeDecodeMVCCValue(t *testing.T) {
 			fmt.Fprintf(&buf, "encoded: %x", enc)
 			assert.Equal(t, encodedMVCCValueSize(tc.val), len(enc))
 
+			{
+				// Ensure the alternative API that allows encoding directly into
+				// a sized buffer produces an identical encoding.
+				enc2 := make([]byte, encodedMVCCValueSize(tc.val))
+				err := encodeMVCCValueToSizedBuf(enc2, tc.val)
+				require.NoError(t, err)
+				if !bytes.Equal(enc, enc2) {
+					t.Errorf("EncodeMVCCValue(%s) = %x; encodeMVCCValueToSizedBuf yielded %x", tc.val, enc, enc2)
+				}
+			}
+
 			dec, err := DecodeMVCCValue(enc)
 			require.NoError(t, err)
 

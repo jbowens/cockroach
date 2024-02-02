@@ -565,7 +565,7 @@ func BenchmarkMVCCBatchPut_Pebble(b *testing.B) {
 		batchSizes = []int{10, 10000}
 	}
 
-	for _, valueSize := range []int{10} {
+	for _, valueSize := range []int{10, 100, 1000} {
 		b.Run(fmt.Sprintf("valueSize=%d", valueSize), func(b *testing.B) {
 			for _, batchSize := range batchSizes {
 				b.Run(fmt.Sprintf("batchSize=%d", batchSize), func(b *testing.B) {

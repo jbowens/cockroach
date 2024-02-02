@@ -275,12 +275,15 @@ func (wb *writeBatch) Merge(key MVCCKey, value []byte) error {
 func (wb *writeBatch) PutMVCC(key MVCCKey, value MVCCValue) error {
 	if key.Timestamp.IsEmpty() {
 		panic("PutMVCC timestamp is empty")
+	} else if len(key.Key) == 0 {
+		return emptyKeyError()
 	}
-	encValue, err := EncodeMVCCValue(value)
-	if err != nil {
-		return err
-	}
-	return wb.put(key, encValue)
+	keyLen := encodedMVCCKeyLength(key)
+	valLen := encodedMVCCValueSize(value)
+	op := wb.batch.SetDeferred(keyLen, valLen)
+	encodeMVCCKeyToBuf(op.Key, key, keyLen)
+	encodeMVCCValueToSizedBuf(op.Value, value)
+	return op.Finish()
 }
 
 // PutRawMVCC implements the Writer interface.
@@ -309,9 +312,11 @@ func (wb *writeBatch) put(key MVCCKey, value []byte) error {
 	if len(key.Key) == 0 {
 		return emptyKeyError()
 	}
-
-	wb.buf = EncodeMVCCKeyToBuf(wb.buf[:0], key)
-	return wb.batch.Set(wb.buf, value, nil)
+	keyLen := encodedMVCCKeyLength(key)
+	op := wb.batch.SetDeferred(keyLen, len(value))
+	encodeMVCCKeyToBuf(op.Key, key, keyLen)
+	copy(op.Value, value)
+	return op.Finish()
 }
 
 // LogData implements the Writer interface.
