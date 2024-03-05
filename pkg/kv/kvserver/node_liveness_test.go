@@ -154,7 +154,7 @@ func TestNodeLivenessInitialIncrement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	stickyVFSRegistry := server.NewStickyVFSRegistry()
+	stickyVFSRegistry := storage.NewStickyVFSRegistry()
 	lisReg := listenerutil.NewListenerRegistry()
 	defer lisReg.Close()
 
@@ -466,7 +466,7 @@ func TestNodeLivenessRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	stickyVFSRegistry := server.NewStickyVFSRegistry()
+	stickyVFSRegistry := storage.NewStickyVFSRegistry()
 
 	const numServers int = 2
 	stickyServerArgs := make(map[int]base.TestServerArgs)
@@ -834,7 +834,7 @@ func TestNodeLivenessSetDraining(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	stickyVFSRegistry := server.NewStickyVFSRegistry()
+	stickyVFSRegistry := storage.NewStickyVFSRegistry()
 	lisReg := listenerutil.NewListenerRegistry()
 	defer lisReg.Close()
 
@@ -1165,7 +1165,7 @@ func verifyNodeIsDecommissioning(t *testing.T, tc *testcluster.TestCluster, node
 }
 
 func testNodeLivenessSetDecommissioning(t *testing.T, decommissionNodeIdx int) {
-	stickyVFSRegistry := server.NewStickyVFSRegistry()
+	stickyVFSRegistry := storage.NewStickyVFSRegistry()
 	lisReg := listenerutil.NewListenerRegistry()
 	defer lisReg.Close()
 

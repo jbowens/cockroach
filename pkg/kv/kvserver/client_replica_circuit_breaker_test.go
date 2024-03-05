@@ -1007,7 +1007,7 @@ func setupCircuitBreakerTest(t *testing.T) *circuitBreakerTest {
 	raftCfg.SetDefaults()
 	raftCfg.RaftHeartbeatIntervalTicks = 1
 	raftCfg.RaftElectionTimeoutTicks = 2
-	reg := server.NewStickyVFSRegistry()
+	reg := storage.NewStickyVFSRegistry()
 	args := base.TestClusterArgs{
 		ReplicationMode: base.ReplicationManual,
 		ServerArgs: base.TestServerArgs{

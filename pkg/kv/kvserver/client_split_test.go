@@ -1492,7 +1492,7 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 // See https://github.com/cockroachdb/cockroach/issues/1644.
 func runSetupSplitSnapshotRace(
 	t *testing.T,
-	stickyVFSRegistry server.StickyVFSRegistry,
+	stickyVFSRegistry storage.StickyVFSRegistry,
 	testFn func(*testcluster.TestCluster, roachpb.Key, roachpb.Key),
 ) {
 	const numServers int = 6
@@ -1643,7 +1643,7 @@ func TestSplitSnapshotRace_SplitWins(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	runSetupSplitSnapshotRace(t, server.NewStickyVFSRegistry(), func(tc *testcluster.TestCluster, leftKey, rightKey roachpb.Key) {
+	runSetupSplitSnapshotRace(t, storage.NewStickyVFSRegistry(), func(tc *testcluster.TestCluster, leftKey, rightKey roachpb.Key) {
 		// Bring the left range up first so that the split happens before it sees a snapshot.
 		for i := 1; i <= 3; i++ {
 			require.NoError(t, tc.RestartServer(i))
@@ -1677,7 +1677,7 @@ func TestSplitSnapshotRace_SnapshotWins(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	runSetupSplitSnapshotRace(t, server.NewStickyVFSRegistry(), func(tc *testcluster.TestCluster, leftKey, rightKey roachpb.Key) {
+	runSetupSplitSnapshotRace(t, storage.NewStickyVFSRegistry(), func(tc *testcluster.TestCluster, leftKey, rightKey roachpb.Key) {
 		// Bring the right range up first.
 		for i := 3; i <= 5; i++ {
 			require.NoError(t, tc.RestartServer(i))

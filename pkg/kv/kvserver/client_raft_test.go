@@ -112,7 +112,7 @@ func TestStoreRecoverFromEngine(t *testing.T) {
 				},
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						StickyVFSRegistry: server.NewStickyVFSRegistry(),
+						StickyVFSRegistry: storage.NewStickyVFSRegistry(),
 					},
 				},
 			},
@@ -202,7 +202,7 @@ func TestStoreRecoverWithErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	stickyVFSRegistry := server.NewStickyVFSRegistry()
+	stickyVFSRegistry := storage.NewStickyVFSRegistry()
 	lisReg := listenerutil.NewListenerRegistry()
 	defer lisReg.Close()
 
@@ -347,7 +347,7 @@ func TestRestoreReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	stickyVFSRegistry := server.NewStickyVFSRegistry()
+	stickyVFSRegistry := storage.NewStickyVFSRegistry()
 	lisReg := listenerutil.NewListenerRegistry()
 	defer lisReg.Close()
 
@@ -684,7 +684,7 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 					},
 					Knobs: base.TestingKnobs{
 						Server: &server.TestingKnobs{
-							StickyVFSRegistry: server.NewStickyVFSRegistry(),
+							StickyVFSRegistry: storage.NewStickyVFSRegistry(),
 						},
 					},
 				}
@@ -1728,7 +1728,7 @@ func TestConcurrentRaftSnapshots(t *testing.T) {
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyVFSRegistry: server.NewStickyVFSRegistry(),
+					StickyVFSRegistry: storage.NewStickyVFSRegistry(),
 				},
 			},
 		}
@@ -1811,7 +1811,7 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyVFSRegistry: server.NewStickyVFSRegistry(),
+					StickyVFSRegistry: storage.NewStickyVFSRegistry(),
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					// Disable the replica GC queue so that it doesn't accidentally pick up the
@@ -1905,7 +1905,7 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 			RaftConfig: raftConfig,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyVFSRegistry: server.NewStickyVFSRegistry(),
+					StickyVFSRegistry: storage.NewStickyVFSRegistry(),
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					// Disable leader transfers during leaseholder changes so that we
@@ -2210,7 +2210,7 @@ func TestProgressWithDownNode(t *testing.T) {
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyVFSRegistry: server.NewStickyVFSRegistry(),
+					StickyVFSRegistry: storage.NewStickyVFSRegistry(),
 				},
 			},
 		}
@@ -2292,7 +2292,7 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyVFSRegistry: server.NewStickyVFSRegistry(),
+					StickyVFSRegistry: storage.NewStickyVFSRegistry(),
 					WallClock:         manualClock,
 				},
 			},
@@ -2395,7 +2395,7 @@ func testReplicaAddRemove(t *testing.T, addFirst bool) {
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyVFSRegistry: server.NewStickyVFSRegistry(),
+					StickyVFSRegistry: storage.NewStickyVFSRegistry(),
 					WallClock:         manualClock,
 				},
 				Store: &kvserver.StoreTestingKnobs{
@@ -3494,7 +3494,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyVFSRegistry: server.NewStickyVFSRegistry(),
+					StickyVFSRegistry: storage.NewStickyVFSRegistry(),
 					WallClock:         manualClock,
 				},
 				Store: &kvserver.StoreTestingKnobs{
@@ -3838,7 +3838,7 @@ func TestReplicaTooOldGC(t *testing.T) {
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyVFSRegistry: server.NewStickyVFSRegistry(),
+					StickyVFSRegistry: storage.NewStickyVFSRegistry(),
 				},
 				Store: &kvserver.StoreTestingKnobs{
 					DisableScanner: true,
@@ -3935,7 +3935,7 @@ func TestReplicateReAddAfterDown(t *testing.T) {
 			},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
-					StickyVFSRegistry: server.NewStickyVFSRegistry(),
+					StickyVFSRegistry: storage.NewStickyVFSRegistry(),
 				},
 			},
 		}
@@ -4802,7 +4802,7 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	stickyVFSRegistry := server.NewStickyVFSRegistry()
+	stickyVFSRegistry := storage.NewStickyVFSRegistry()
 	lisReg := listenerutil.NewListenerRegistry()
 	defer lisReg.Close()
 
@@ -5211,7 +5211,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 				},
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
-						StickyVFSRegistry: server.NewStickyVFSRegistry(),
+						StickyVFSRegistry: storage.NewStickyVFSRegistry(),
 					},
 					Store: &kvserver.StoreTestingKnobs{
 						// Newly-started stores (including the "rogue" one) should not GC
@@ -5577,7 +5577,7 @@ func TestElectionAfterRestart(t *testing.T) {
 	const electionTimeoutTicks = 30
 	const raftTickInterval = 200 * time.Millisecond
 
-	r := server.NewStickyVFSRegistry()
+	r := storage.NewStickyVFSRegistry()
 	newTCArgs := func(parallel bool, replMode base.TestClusterReplicationMode, onTimeoutCampaign func(roachpb.RangeID)) base.TestClusterArgs {
 		return base.TestClusterArgs{
 			ReplicationMode: replMode,

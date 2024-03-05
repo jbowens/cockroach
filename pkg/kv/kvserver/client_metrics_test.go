@@ -241,7 +241,7 @@ func TestStoreMetrics(t *testing.T) {
 
 	ctx := context.Background()
 	const numServers int = 3
-	stickyVFSRegistry := server.NewStickyVFSRegistry()
+	stickyVFSRegistry := storage.NewStickyVFSRegistry()
 	stickyServerArgs := make(map[int]base.TestServerArgs)
 	locs := make(map[int]storage.Location)
 	for i := 0; i < numServers; i++ {

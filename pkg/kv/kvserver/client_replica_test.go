@@ -2160,7 +2160,7 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	stickyVFSRegistry := server.NewStickyVFSRegistry()
+	stickyVFSRegistry := storage.NewStickyVFSRegistry()
 	lisReg := listenerutil.NewListenerRegistry()
 	defer lisReg.Close()
 
@@ -4702,7 +4702,7 @@ func TestTenantID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	stickyVFSRegistry := server.NewStickyVFSRegistry()
+	stickyVFSRegistry := storage.NewStickyVFSRegistry()
 	ctx := context.Background()
 	// Create a config with a sticky-in-mem engine so we can restart the server.
 	// We also configure the settings to be as robust as possible to problems

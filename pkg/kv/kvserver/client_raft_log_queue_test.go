@@ -170,7 +170,7 @@ func TestCrashWhileTruncatingSideloadedEntries(t *testing.T) {
 
 	// Use sticky engine registry to "survive" a node restart. Use the strict
 	// in-memory engine to be able to stop flushes and emulate data loss.
-	vfsReg := server.NewStickyVFSRegistry(server.UseStrictMemFS)
+	vfsReg := storage.NewStickyVFSRegistry(storage.UseStrictMemFS)
 	// Use the sticky listener registry so that server port assignments survive
 	// node restarts, and don't get erroneously used by other clusters.
 	netReg := listenerutil.NewListenerRegistry()

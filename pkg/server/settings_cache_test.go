@@ -67,7 +67,7 @@ func TestCachedSettingsServerRestart(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	stickyVFSRegistry := NewStickyVFSRegistry()
+	stickyVFSRegistry := storage.NewStickyVFSRegistry()
 
 	serverArgs := base.TestServerArgs{
 		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,

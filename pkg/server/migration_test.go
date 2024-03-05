@@ -112,7 +112,7 @@ func TestSyncAllEngines(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	vfsRegistry := NewStickyVFSRegistry(UseStrictMemFS)
+	vfsRegistry := storage.NewStickyVFSRegistry(storage.UseStrictMemFS)
 	storeSpec := base.DefaultTestStoreSpec
 	storeSpec.StickyVFSID = "sync-all-engines"
 	testServerArgs := base.TestServerArgs{

@@ -248,7 +248,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	// Test uses sticky registry to have persistent pebble state that could
 	// be analyzed for existence of snapshots and to verify snapshot content
 	// after failures.
-	stickyVFSRegistry := server.NewStickyVFSRegistry()
+	stickyVFSRegistry := storage.NewStickyVFSRegistry()
 
 	// The cluster has 3 nodes, one store per node. The test writes a few KVs to a
 	// range, which gets replicated to all 3 stores. Then it manually replaces an

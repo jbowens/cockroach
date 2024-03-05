@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -103,7 +104,7 @@ type TestingKnobs struct {
 	//
 	// When supplied to a TestCluster, StickyVFSIDs will be associated auto-
 	// matically to the StoreSpecs used.
-	StickyVFSRegistry StickyVFSRegistry
+	StickyVFSRegistry storage.StickyVFSRegistry
 	// WallClock is used to inject a custom clock for testing the server. It is
 	// typically either an hlc.HybridManualClock or hlc.ManualClock.
 	WallClock hlc.WallClock
