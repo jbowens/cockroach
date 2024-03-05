@@ -12,8 +12,11 @@ package storage
 
 import (
 	"context"
+	"io"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -311,4 +314,116 @@ func Open(
 		return nil, err
 	}
 	return p, nil
+}
+
+type VirtualFilesystems []VFS
+
+func (vf VirtualFilesystems) CloseAll() error {
+	var err error
+	for i := range vf {
+		err = errors.CombineErrors(err, vf[i].Close())
+	}
+	return err
+}
+
+func InitFilesystems(
+	ctx context.Context, specs []base.StoreSpec, readOnly bool, stickyRegistry StickyVFSRegistry,
+) (VirtualFilesystems, error) {
+	vf := make(VirtualFilesystems, len(specs))
+	for i := range specs {
+		v, err := createVFS(ctx, specs[i], readOnly, stickyRegistry)
+		if err != nil {
+			return nil, errors.CombineErrors(err, vf.CloseAll())
+		}
+		vf[i] = v
+	}
+	return vf, nil
+}
+
+type VFS struct {
+	base.StoreSpec
+	Default       vfs.FS
+	Unencrypted   vfs.FS
+	Registry      *PebbleFileRegistry
+	EncryptionEnv *EncryptionEnv
+
+	diskHealthChecksCloser io.Closer
+	onDiskSlowFunc         func(vfs.DiskSlowInfo)
+}
+
+// Close closes all the open resources associated with the VFS. If the VFS had
+// an associated file registry (eg, encryption-at-rest is or was configured) it
+// will be closed. All disk-health monitoring goroutines will also exit.
+func (fs *VFS) Close() error {
+	var err error
+	if fs.diskHealthChecksCloser != nil {
+		err = errors.CombineErrors(err, fs.diskHealthChecksCloser.Close())
+	}
+	if fs.EncryptionEnv != nil {
+		err = errors.CombineErrors(err, fs.EncryptionEnv.Closer.Close())
+	}
+	return err
+}
+
+func (fs *VFS) onDiskSlow(info vfs.DiskSlowInfo) {
+	if fs.onDiskSlowFunc != nil {
+		fs.onDiskSlowFunc(info)
+	}
+}
+
+func createVFS(
+	ctx context.Context, spec base.StoreSpec, readOnly bool, stickyRegistry StickyVFSRegistry,
+) (VFS, error) {
+	fs := VFS{
+		StoreSpec:   spec,
+		Unencrypted: vfs.Default,
+	}
+	if spec.InMemory {
+		if spec.StickyVFSID != "" {
+			if stickyRegistry == nil {
+				return VFS{}, errors.Errorf("missing StickyVFSRegistry")
+			}
+			fs.Unencrypted = stickyRegistry.Get(spec.StickyVFSID)
+		} else {
+			fs.Unencrypted = vfs.NewMem()
+		}
+	}
+
+	// Set disk-health check interval to min(5s, maxSyncDurationDefault). This
+	// is mostly to ease testing; the default of 5s is too infrequent to test
+	// conveniently. See the disk-stalled roachtest for an example of how this
+	// is used.
+	diskHealthCheckInterval := 5 * time.Second
+	if diskHealthCheckInterval.Seconds() > maxSyncDurationDefault.Seconds() {
+		diskHealthCheckInterval = maxSyncDurationDefault
+	}
+
+	// Instantiate a file system with disk health checking enabled. This FS
+	// wraps the filesystem with a layer that times all write-oriented
+	// operations. When a slow disk operation occurs,
+	// VFS.onDiskSlow is invoked (which in turn will invoke
+	// VFS.onDiskSlowFunc if set).
+	fs.Unencrypted, fs.diskHealthChecksCloser = vfs.WithDiskHealthChecks(
+		fs.Unencrypted, diskHealthCheckInterval, nil /* statsCollector */, fs.onDiskSlow)
+	// If we encounter ENOSPC, exit with an informative exit code.
+	fs.Unencrypted = vfs.OnDiskFull(fs.Unencrypted, func() {
+		exit.WithCode(exit.DiskFull())
+	})
+
+	// Validate and configure encryption-at-rest. If no encryption-at-rest
+	// configuration was provided, ResolveEncryptedEnvOptions will validate that
+	// there is no file registry.
+	var err error
+	fs.Registry, fs.EncryptionEnv, err = ResolveEncryptedEnvOptions(
+		ctx, fs.Unencrypted, spec.Path, spec.EncryptionOptions, readOnly)
+	if err != nil {
+		fs.Close()
+		return VFS{}, err
+	}
+	if fs.EncryptionEnv != nil {
+		fs.Default = fs.EncryptionEnv.FS
+	} else {
+		fs.Default = fs.Unencrypted
+	}
+	return fs, nil
 }

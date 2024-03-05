@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -807,10 +806,6 @@ func wrapFilesystemMiddleware(opts *pebble.Options) (vfs.FS, io.Closer) {
 				WriteSize: info.WriteSize,
 			})
 		})
-	// If we encounter ENOSPC, exit with an informative exit code.
-	fs = vfs.OnDiskFull(fs, func() {
-		exit.WithCode(exit.DiskFull())
-	})
 	return fs, closer
 }
 
@@ -1074,44 +1069,30 @@ func (r remoteStorageAdaptor) CreateStorage(locator remote.Locator) (remote.Stor
 // registry if this store has encryption-at-rest enabled; otherwise returns a
 // nil EncryptionEnv.
 func ResolveEncryptedEnvOptions(
-	ctx context.Context, cfg *base.StorageConfig, fs vfs.FS, readOnly bool,
+	ctx context.Context, fs vfs.FS, dir string, encryptionOpts []byte, readOnly bool,
 ) (*PebbleFileRegistry, *EncryptionEnv, error) {
-	var fileRegistry *PebbleFileRegistry
-	if cfg.UseFileRegistry {
-		fileRegistry = &PebbleFileRegistry{FS: fs, DBDir: cfg.Dir, ReadOnly: readOnly,
-			NumOldRegistryFiles: DefaultNumOldFileRegistryFiles}
-		if err := fileRegistry.Load(ctx); err != nil {
-			return nil, nil, err
-		}
-	} else {
-		if err := CheckNoRegistryFile(fs, cfg.Dir); err != nil {
+	if len(encryptionOpts) == 0 {
+		if err := CheckNoRegistryFile(fs, dir); err != nil {
 			return nil, nil, fmt.Errorf("encryption was used on this store before, but no encryption flags " +
 				"specified. You need a CCL build and must fully specify the --enterprise-encryption flag")
 		}
+		return nil, nil, nil
 	}
 
-	var env *EncryptionEnv
-	if cfg.IsEncrypted() {
-		// Encryption is enabled.
-		if !cfg.UseFileRegistry {
-			return nil, nil, fmt.Errorf("file registry is needed to support encryption")
-		}
-		if NewEncryptedEnvFunc == nil {
-			return nil, nil, fmt.Errorf("encryption is enabled but no function to create the encrypted env")
-		}
-		var err error
-		env, err = NewEncryptedEnvFunc(
-			fs,
-			fileRegistry,
-			cfg.Dir,
-			readOnly,
-			cfg.EncryptionOptions,
-		)
-		if err != nil {
-			return nil, nil, err
-		}
+	// Encryption is enabled.
+	registry := &PebbleFileRegistry{FS: fs, DBDir: dir, ReadOnly: readOnly,
+		NumOldRegistryFiles: DefaultNumOldFileRegistryFiles}
+	if err := registry.Load(ctx); err != nil {
+		return nil, nil, err
 	}
-	return fileRegistry, env, nil
+	if NewEncryptedEnvFunc == nil {
+		return nil, nil, errors.Newf("encryption is enabled but no function to create the encrypted env")
+	}
+	env, err := NewEncryptedEnvFunc(fs, registry, dir, readOnly, encryptionOpts)
+	if err != nil {
+		return nil, nil, err
+	}
+	return registry, env, nil
 }
 
 // ConfigureForSharedStorage is used to configure a pebble Options for shared
@@ -1226,7 +1207,7 @@ func NewPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	// filesystem.
 	unencryptedFS := opts.FS
 	fileRegistry, encryptionEnv, err :=
-		ResolveEncryptedEnvOptions(ctx, &cfg.StorageConfig, opts.FS, opts.ReadOnly)
+		ResolveEncryptedEnvOptions(ctx, opts.FS, cfg.Dir, cfg.EncryptionOptions, opts.ReadOnly)
 	if err != nil {
 		return nil, err
 	}

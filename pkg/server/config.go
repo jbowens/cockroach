@@ -743,8 +743,19 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	}
 
 	var storeKnobs kvserver.StoreTestingKnobs
+	var stickyRegistry storage.StickyVFSRegistry
 	if s := cfg.TestingKnobs.Store; s != nil {
 		storeKnobs = *s.(*kvserver.StoreTestingKnobs)
+	}
+	if cfg.TestingKnobs.Server != nil {
+		serverKnobs := cfg.TestingKnobs.Server.(*TestingKnobs)
+		stickyRegistry = serverKnobs.StickyVFSRegistry
+	}
+
+	// First initialize the filesystems for every store based on the specs.
+	filesystems, err := storage.InitFilesystems(cfg.Stores.Specs, stickyRegistry)
+	if err != nil {
+		return Engines{}, err
 	}
 
 	for i, spec := range cfg.Stores.Specs {
@@ -762,25 +773,11 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			storageConfigOpts = append(storageConfigOpts, opt)
 		}
 
-		var location storage.Location
-		if spec.InMemory {
-			if spec.StickyVFSID == "" {
-				location = storage.InMemory()
-			} else {
-				if cfg.TestingKnobs.Server == nil {
-					return Engines{}, errors.AssertionFailedf("Could not create a sticky " +
-						"engine no server knobs available to get a registry. " +
-						"Please use Knobs.Server.StickyVFSRegistry to provide one.")
-				}
-				knobs := cfg.TestingKnobs.Server.(*TestingKnobs)
-				if knobs.StickyVFSRegistry == nil {
-					return Engines{}, errors.Errorf("Could not create a sticky " +
-						"engine no registry available. Please use " +
-						"Knobs.Server.StickyVFSRegistry to provide one.")
-				}
-				location = storage.MakeLocation("", knobs.StickyVFSRegistry.Get(spec.StickyVFSID))
-			}
+		var location storage.Location = func() storage.Location {
+			panic("TODO")
+		}()
 
+		if spec.InMemory {
 			var sizeInBytes = spec.Size.InBytes
 			if spec.Size.Percent > 0 {
 				sysMem, err := status.GetTotalMemory(ctx)
@@ -799,7 +796,6 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 
 			detail(redact.Sprintf("store %d: in-memory, size %s", i, humanizeutil.IBytes(sizeInBytes)))
 		} else {
-			location = storage.Filesystem(spec.Path)
 			if err := vfs.Default.MkdirAll(spec.Path, 0755); err != nil {
 				return Engines{}, errors.Wrap(err, "creating store directory")
 			}
