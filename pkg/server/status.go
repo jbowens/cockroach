@@ -3748,24 +3748,18 @@ func (s *systemStatusServer) Stores(
 
 	resp := &serverpb.StoresResponse{}
 	err = s.stores.VisitStores(func(store *kvserver.Store) error {
-		storeDetails := serverpb.StoreDetails{
-			StoreID: store.Ident.StoreID,
-		}
-
-		envStats, err := store.TODOEngine().GetEnvStats()
+		envStats, err := store.TODOEngine().Env().Stats()
 		if err != nil {
 			return err
 		}
-
-		if len(envStats.EncryptionStatus) > 0 {
-			storeDetails.EncryptionStatus = envStats.EncryptionStatus
-		}
-		storeDetails.TotalFiles = envStats.TotalFiles
-		storeDetails.TotalBytes = envStats.TotalBytes
-		storeDetails.ActiveKeyFiles = envStats.ActiveKeyFiles
-		storeDetails.ActiveKeyBytes = envStats.ActiveKeyBytes
-
-		resp.Stores = append(resp.Stores, storeDetails)
+		resp.Stores = append(resp.Stores, serverpb.StoreDetails{
+			StoreID:          store.Ident.StoreID,
+			EncryptionStatus: envStats.EncryptionStatus,
+			TotalFiles:       envStats.TotalFiles,
+			TotalBytes:       envStats.TotalBytes,
+			ActiveKeyFiles:   envStats.ActiveKeyFiles,
+			ActiveKeyBytes:   envStats.ActiveKeyBytes,
+		})
 
 		return nil
 	})

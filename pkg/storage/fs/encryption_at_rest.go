@@ -32,7 +32,7 @@ var NewEncryptedEnvFunc func(
 // nil EncryptionEnv.
 func resolveEncryptedEnvOptions(
 	ctx context.Context, unencryptedFS vfs.FS, dir string, encryptionOpts []byte, rw RWMode,
-) (*FileRegistry, *EncryptionEnv, error) {
+) (*EncryptionEnv, error) {
 	if len(encryptionOpts) == 0 {
 		// There's no encryption config. This is valid if the user doesn't
 		// intend to use encryption-at-rest, and the store has never had
@@ -40,28 +40,29 @@ func resolveEncryptedEnvOptions(
 		// If there is, the caller is required to specify an
 		// --enterprise-encryption flag for this store.
 		if err := checkNoRegistryFile(unencryptedFS, dir); err != nil {
-			return nil, nil, fmt.Errorf("encryption was used on this store before, but no encryption flags " +
+			return nil, fmt.Errorf("encryption was used on this store before, but no encryption flags " +
 				"specified. You need a CCL build and must fully specify the --enterprise-encryption flag")
 		}
-		return nil, nil, nil
+		return nil, nil
 	}
 
 	// We'll need to use the encryption-at-rest filesystem. Even if the store
 	// isn't configured to encrypt files, there may still be encrypted files
 	// from a previous configuration.
 	if NewEncryptedEnvFunc == nil {
-		return nil, nil, fmt.Errorf("encryption is enabled but no function to create the encrypted env")
+		return nil, fmt.Errorf("encryption is enabled but no function to create the encrypted env")
 	}
+	// TODO(jackson): Should NewEncryptedEnvFunc load the file registry?
 	fileRegistry := &FileRegistry{FS: unencryptedFS, DBDir: dir, ReadOnly: rw == ReadOnly,
 		NumOldRegistryFiles: DefaultNumOldFileRegistryFiles}
 	if err := fileRegistry.Load(ctx); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	env, err := NewEncryptedEnvFunc(unencryptedFS, fileRegistry, dir, rw == ReadOnly, encryptionOpts)
 	if err != nil {
-		return nil, nil, errors.WithSecondaryError(err, fileRegistry.Close())
+		return nil, errors.WithSecondaryError(err, fileRegistry.Close())
 	}
-	return fileRegistry, env, nil
+	return env, nil
 }
 
 // EncryptionEnv describes the encryption-at-rest environment, providing
@@ -74,6 +75,10 @@ type EncryptionEnv struct {
 	// FS provides the encrypted virtual filesystem. New files are
 	// transparently encrypted.
 	FS vfs.FS
+	// Registry is non-nil if encryption-at-rest has ever been enabled on the
+	// store. The registry maintains a mapping of all encrypted keys and the
+	// corresponding data key with which they're encrypted.
+	Registry *FileRegistry
 	// StatsHandler exposes encryption-at-rest state for observability.
 	StatsHandler EncryptionStatsHandler
 }
@@ -91,20 +96,16 @@ type EncryptionRegistries struct {
 
 // EncryptionStatsHandler provides encryption related stats.
 type EncryptionStatsHandler interface {
-	// Returns a serialized enginepbccl.EncryptionStatus.
-	GetEncryptionStatus() ([]byte, error)
-	// Returns a serialized enginepbccl.DataKeysRegistry, scrubbed of key contents.
-	GetDataKeysRegistry() ([]byte, error)
-	// Returns the ID of the active data key, or "plain" if none.
-	GetActiveDataKeyID() (string, error)
-	// Returns the enum value of the encryption type.
-	GetActiveStoreKeyType() int32
-	// Returns the KeyID embedded in the serialized EncryptionSettings.
-	GetKeyIDFromSettings(settings []byte) (string, error)
+	// SerializedRegistries retrieves the serialized encryption-at-rest
+	// registries, scrubbed of key contents.
+	SerializedRegistries() (EncryptionRegistries, error)
+	// Stats returns the current encryption stats.
+	Stats() (EncryptionStats, error)
 }
 
-// EnvStats is a set of RocksDB env stats, including encryption status.
-type EnvStats struct {
+// EncryptionStats is a set of statistics around encryption-at-rest and its
+// current state.
+type EncryptionStats struct {
 	// TotalFiles is the total number of files reported by rocksdb.
 	TotalFiles uint64
 	// TotalBytes is the total size of files reported by rocksdb.

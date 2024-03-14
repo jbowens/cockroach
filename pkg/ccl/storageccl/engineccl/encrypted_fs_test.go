@@ -270,7 +270,7 @@ func TestPebbleEncryption(t *testing.T) {
 		defer db.Close()
 
 		// TODO(sbhola): Ensure that we are not returning the secret data keys by mistake.
-		r, err := db.GetEncryptionRegistries()
+		r, err := db.Env().Encryption.StatsHandler.SerializedRegistries()
 		require.NoError(t, err)
 
 		var fileRegistry enginepb.FileRegistry
@@ -278,7 +278,7 @@ func TestPebbleEncryption(t *testing.T) {
 		var keyRegistry enginepbccl.DataKeysRegistry
 		require.NoError(t, protoutil.Unmarshal(r.KeyRegistry, &keyRegistry))
 
-		stats, err := db.GetEnvStats()
+		stats, err := db.Env().Stats()
 		require.NoError(t, err)
 		// Opening the DB should've created OPTIONS, MANIFEST, and the WAL.
 		require.GreaterOrEqual(t, stats.TotalFiles, uint64(3))
@@ -288,7 +288,7 @@ func TestPebbleEncryption(t *testing.T) {
 		require.NoError(t, protoutil.Unmarshal(stats.EncryptionStatus, &s))
 		require.Equal(t, "16.key", s.ActiveStoreKey.Source)
 		require.Equal(t, int32(enginepbccl.EncryptionType_AES128_CTR), stats.EncryptionType)
-		t.Logf("EnvStats:\n%+v\n\n", *stats)
+		t.Logf("EnvStats:\n%+v\n\n", stats)
 
 		batch := db.NewWriteBatch()
 		defer batch.Close()
@@ -319,9 +319,9 @@ func TestPebbleEncryption(t *testing.T) {
 		require.Equal(t, []byte("a"), storageutils.MVCCGetRaw(t, db, storageutils.PointKey("a", 0)))
 
 		// Flushing should've created a new sstable under the active key.
-		stats, err := db.GetEnvStats()
+		stats, err := db.Env().Stats()
 		require.NoError(t, err)
-		t.Logf("EnvStats:\n%+v\n\n", *stats)
+		t.Logf("EnvStats:\n%+v\n\n", stats)
 		require.GreaterOrEqual(t, stats.TotalFiles, uint64(5))
 		require.LessOrEqual(t, uint64(5), stats.ActiveKeyFiles)
 		require.Equal(t, stats.TotalBytes, stats.ActiveKeyBytes)

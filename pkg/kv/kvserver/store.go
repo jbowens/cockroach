@@ -3349,11 +3349,11 @@ func (s *Store) computeMetrics(ctx context.Context) (m storage.Metrics, err erro
 	s.metrics.updateEngineMetrics(m)
 
 	// Get engine Env stats.
-	envStats, err := s.TODOEngine().GetEnvStats()
+	envStats, err := s.TODOEngine().Env().Stats()
 	if err != nil {
 		return m, err
 	}
-	s.metrics.updateEnvStats(*envStats)
+	s.metrics.updateEnvStats(envStats)
 
 	{
 		dirs, err := s.TODOEngine().List(s.checkpointsDir())

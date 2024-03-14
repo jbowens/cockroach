@@ -942,12 +942,6 @@ type Engine interface {
 	Flush() error
 	// GetMetrics retrieves metrics from the engine.
 	GetMetrics() Metrics
-	// GetEncryptionRegistries returns the file and key registries when encryption is enabled
-	// on the store.
-	GetEncryptionRegistries() (*fs.EncryptionRegistries, error)
-	// GetEnvStats retrieves stats about the engine's environment
-	// For RocksDB, this includes details of at-rest encryption.
-	GetEnvStats() (*fs.EnvStats, error)
 	// GetAuxiliaryDir returns a path under which files can be stored
 	// persistently, and from which data can be ingested by the engine.
 	//

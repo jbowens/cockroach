@@ -240,11 +240,108 @@ func (fs *encryptedFS) ReuseForWrite(oldname, newname string) (vfs.File, error) 
 }
 
 type encryptionStatsHandler struct {
-	storeKM *StoreKeyManager
-	dataKM  *DataKeyManager
+	storeKM  *StoreKeyManager
+	dataKM   *DataKeyManager
+	registry *fs.FileRegistry
 }
 
-func (e *encryptionStatsHandler) GetEncryptionStatus() ([]byte, error) {
+// SerializedRegistries retrieves the serialized encryption-at-rest
+// registries, scrubbed of key contents.
+func (e *encryptionStatsHandler) SerializedRegistries() (fs.EncryptionRegistries, error) {
+	var reg fs.EncryptionRegistries
+	var err error
+	reg.KeyRegistry, err = protoutil.Marshal(e.dataKM.getScrubbedRegistry())
+	if err != nil {
+		return fs.EncryptionRegistries{}, err
+	}
+	reg.FileRegistry, err = protoutil.Marshal(e.registry.GetRegistrySnapshot())
+	if err != nil {
+		return fs.EncryptionRegistries{}, err
+	}
+	return reg, nil
+}
+
+// Stats returns the current encryption stats.
+func (e *encryptionStatsHandler) Stats() (fs.EncryptionStats, error) {
+	// TODO(sumeer): make the stats complete. There are no bytes stats. The TotalFiles is missing
+	// files that are not in the registry (from before encryption was enabled).
+	stats := fs.EncryptionStats{
+		EncryptionType: e.getActiveStoreKeyType(),
+	}
+	var err error
+	stats.EncryptionStatus, err = e.getEncryptionStatus()
+	if err != nil {
+		return fs.EncryptionStats{}, err
+	}
+	activeKeyID, err := e.getActiveDataKeyID()
+	if err != nil {
+		return fs.EncryptionStats{}, err
+	}
+	_ = activeKeyID
+
+	fr := e.registry.GetRegistrySnapshot()
+	/*
+		m := p.db.Metrics()
+		stats.TotalFiles = 3
+		stats.TotalFiles += uint64(m.WAL.Files + m.Table.ZombieCount + m.WAL.ObsoleteFiles + m.Table.ObsoleteCount)
+		stats.TotalBytes = m.WAL.Size + m.Table.ZombieSize + m.Table.ObsoleteSize
+		for _, l := range m.Levels {
+			stats.TotalFiles += uint64(l.NumFiles)
+			stats.TotalBytes += uint64(l.Size)
+		}
+
+		sstSizes := make(map[pebble.FileNum]uint64)
+		sstInfos, err := p.db.SSTables()
+		if err != nil {
+			return nil, err
+		}
+		for _, ssts := range sstInfos {
+			for _, sst := range ssts {
+				sstSizes[sst.FileNum] = sst.Size
+			}
+		}
+
+		fr := e.registry.GetRegistrySnapshot()
+		for filePath, entry := range fr.Files {
+			keyID, err := p.env.Encryption.StatsHandler.GetKeyIDFromSettings(entry.EncryptionSettings)
+			if err != nil {
+				return nil, err
+			}
+			if len(keyID) == 0 {
+				keyID = "plain"
+			}
+			if keyID != activeKeyID {
+				continue
+			}
+			stats.ActiveKeyFiles++
+
+			filename := p.FS.PathBase(filePath)
+			numStr := strings.TrimSuffix(filename, ".sst")
+			if len(numStr) == len(filename) {
+				continue // not a sstable
+			}
+			u, err := strconv.ParseUint(numStr, 10, 64)
+			if err != nil {
+				return nil, errors.Wrapf(err, "parsing filename %q", errors.Safe(filename))
+			}
+			stats.ActiveKeyBytes += sstSizes[pebble.FileNum(u)]
+		}
+
+		// Ensure that encryption percentage does not exceed 100%.
+		frFileLen := uint64(len(fr.Files))
+		if stats.TotalFiles < frFileLen {
+			stats.TotalFiles = frFileLen
+		}
+
+		if stats.TotalBytes < stats.ActiveKeyBytes {
+			stats.TotalBytes = stats.ActiveKeyBytes
+		}
+	*/
+
+	return stats, nil
+}
+
+func (e *encryptionStatsHandler) getEncryptionStatus() ([]byte, error) {
 	var s enginepbccl.EncryptionStatus
 	if e.storeKM.activeKey != nil {
 		s.ActiveStoreKey = e.storeKM.activeKey.Info
@@ -259,12 +356,7 @@ func (e *encryptionStatsHandler) GetEncryptionStatus() ([]byte, error) {
 	return protoutil.Marshal(&s)
 }
 
-func (e *encryptionStatsHandler) GetDataKeysRegistry() ([]byte, error) {
-	r := e.dataKM.getScrubbedRegistry()
-	return protoutil.Marshal(r)
-}
-
-func (e *encryptionStatsHandler) GetActiveDataKeyID() (string, error) {
+func (e *encryptionStatsHandler) getActiveDataKeyID() (string, error) {
 	k, err := e.dataKM.ActiveKey(context.TODO())
 	if err != nil {
 		return "", err
@@ -275,14 +367,14 @@ func (e *encryptionStatsHandler) GetActiveDataKeyID() (string, error) {
 	return "plain", nil
 }
 
-func (e *encryptionStatsHandler) GetActiveStoreKeyType() int32 {
+func (e *encryptionStatsHandler) getActiveStoreKeyType() int32 {
 	if e.storeKM.activeKey != nil {
 		return int32(e.storeKM.activeKey.Info.EncryptionType)
 	}
 	return int32(enginepbccl.EncryptionType_Plaintext)
 }
 
-func (e *encryptionStatsHandler) GetKeyIDFromSettings(settings []byte) (string, error) {
+func (e *encryptionStatsHandler) getKeyIDFromSettings(settings []byte) (string, error) {
 	var s enginepbccl.EncryptionSettings
 	if err := protoutil.Unmarshal(settings, &s); err != nil {
 		return "", err
@@ -359,9 +451,11 @@ func newEncryptedEnv(
 		Closer: dataKeyManager,
 		FS:     dataFS,
 		StatsHandler: &encryptionStatsHandler{
-			storeKM: storeKeyManager,
-			dataKM:  dataKeyManager,
+			storeKM:  storeKeyManager,
+			dataKM:   dataKeyManager,
+			registry: fr,
 		},
+		Registry: fr,
 	}, nil
 }
 
