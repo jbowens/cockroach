@@ -22,7 +22,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -43,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -1969,103 +1967,6 @@ func (p *Pebble) GetMetrics() Metrics {
 	m.BatchCommitStats = p.batchCommitStats.AggregatedBatchCommitStats
 	p.batchCommitStats.Unlock()
 	return m
-}
-
-// GetEncryptionRegistries implements the Engine interface.
-func (p *Pebble) GetEncryptionRegistries() (*fs.EncryptionRegistries, error) {
-	rv := &fs.EncryptionRegistries{}
-	var err error
-	if p.env.Encryption != nil {
-		rv.KeyRegistry, err = p.env.Encryption.StatsHandler.GetDataKeysRegistry()
-		if err != nil {
-			return nil, err
-		}
-	}
-	if p.env.Registry != nil {
-		rv.FileRegistry, err = protoutil.Marshal(p.env.Registry.GetRegistrySnapshot())
-		if err != nil {
-			return nil, err
-		}
-	}
-	return rv, nil
-}
-
-// GetEnvStats implements the Engine interface.
-func (p *Pebble) GetEnvStats() (*fs.EnvStats, error) {
-	// TODO(sumeer): make the stats complete. There are no bytes stats. The TotalFiles is missing
-	// files that are not in the registry (from before encryption was enabled).
-	stats := &fs.EnvStats{}
-	if p.env.Encryption == nil {
-		return stats, nil
-	}
-	stats.EncryptionType = p.env.Encryption.StatsHandler.GetActiveStoreKeyType()
-	var err error
-	stats.EncryptionStatus, err = p.env.Encryption.StatsHandler.GetEncryptionStatus()
-	if err != nil {
-		return nil, err
-	}
-	fr := p.env.Registry.GetRegistrySnapshot()
-	activeKeyID, err := p.env.Encryption.StatsHandler.GetActiveDataKeyID()
-	if err != nil {
-		return nil, err
-	}
-
-	m := p.db.Metrics()
-	stats.TotalFiles = 3 /* CURRENT, MANIFEST, OPTIONS */
-	stats.TotalFiles += uint64(m.WAL.Files + m.Table.ZombieCount + m.WAL.ObsoleteFiles + m.Table.ObsoleteCount)
-	stats.TotalBytes = m.WAL.Size + m.Table.ZombieSize + m.Table.ObsoleteSize
-	for _, l := range m.Levels {
-		stats.TotalFiles += uint64(l.NumFiles)
-		stats.TotalBytes += uint64(l.Size)
-	}
-
-	sstSizes := make(map[pebble.FileNum]uint64)
-	sstInfos, err := p.db.SSTables()
-	if err != nil {
-		return nil, err
-	}
-	for _, ssts := range sstInfos {
-		for _, sst := range ssts {
-			sstSizes[sst.FileNum] = sst.Size
-		}
-	}
-
-	for filePath, entry := range fr.Files {
-		keyID, err := p.env.Encryption.StatsHandler.GetKeyIDFromSettings(entry.EncryptionSettings)
-		if err != nil {
-			return nil, err
-		}
-		if len(keyID) == 0 {
-			keyID = "plain"
-		}
-		if keyID != activeKeyID {
-			continue
-		}
-		stats.ActiveKeyFiles++
-
-		filename := p.FS.PathBase(filePath)
-		numStr := strings.TrimSuffix(filename, ".sst")
-		if len(numStr) == len(filename) {
-			continue // not a sstable
-		}
-		u, err := strconv.ParseUint(numStr, 10, 64)
-		if err != nil {
-			return nil, errors.Wrapf(err, "parsing filename %q", errors.Safe(filename))
-		}
-		stats.ActiveKeyBytes += sstSizes[pebble.FileNum(u)]
-	}
-
-	// Ensure that encryption percentage does not exceed 100%.
-	frFileLen := uint64(len(fr.Files))
-	if stats.TotalFiles < frFileLen {
-		stats.TotalFiles = frFileLen
-	}
-
-	if stats.TotalBytes < stats.ActiveKeyBytes {
-		stats.TotalBytes = stats.ActiveKeyBytes
-	}
-
-	return stats, nil
 }
 
 // GetAuxiliaryDir implements the Engine interface.

@@ -216,11 +216,14 @@ func runEncryptionStatus(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	registries, err := db.GetEncryptionRegistries()
+	encryptionEnv := db.Env().Encryption
+	if encryptionEnv == nil {
+		return nil
+	}
+	registries, err := encryptionEnv.StatsHandler.SerializedRegistries()
 	if err != nil {
 		return err
 	}
-
 	if len(registries.KeyRegistry) == 0 {
 		return nil
 	}

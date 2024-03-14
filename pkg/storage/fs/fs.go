@@ -87,6 +87,11 @@ func (e Envs) CloseAll() error {
 	return err
 }
 
+// EnvStats is a set of filesystem Env stats, including encryption status.
+type EnvStats struct {
+	EncryptionStats
+}
+
 // InitEnvFromStoreSpec constructs a new Env from a store spec. See the
 // documentation for InitEnv for more details.
 //
@@ -166,7 +171,7 @@ func InitEnv(ctx context.Context, fs vfs.FS, dir string, cfg EnvConfig) (*Env, e
 	// Validate and configure encryption-at-rest. If no encryption-at-rest
 	// configuration was provided, resolveEncryptedEnvOptions will validate that
 	// there is no file registry.
-	e.Registry, e.Encryption, err = resolveEncryptedEnvOptions(
+	e.Encryption, err = resolveEncryptedEnvOptions(
 		ctx, e.UnencryptedFS, dir, cfg.EncryptionOptions, cfg.RW)
 	if err != nil {
 		return nil, errors.WithSecondaryError(err, e.Close())
@@ -195,10 +200,6 @@ type Env struct {
 	// DirectoryLock is a file lock preventing other processes from opening the
 	// database or encryption-at-rest registry within this data directory.
 	DirectoryLock *pebble.Lock
-	// Registry is non-nil if encryption-at-rest has ever been enabled on the
-	// store. The registry maintains a mapping of all encrypted keys and the
-	// corresponding data key with which they're encrypted.
-	Registry *FileRegistry
 	// Encryption is non-nil if encryption-at-rest has ever been enabled on
 	// the store. It provides access to encryption-at-rest stats, etc.
 	Encryption *EncryptionEnv
@@ -215,6 +216,19 @@ func (e *Env) IsReadOnly() bool {
 	return e.rw == ReadOnly
 }
 
+// Stats returns statistics about the filesystem environment.
+func (e *Env) Stats() (EnvStats, error) {
+	var stats EnvStats
+	if e.Encryption != nil {
+		var err error
+		stats.EncryptionStats, err = e.Encryption.StatsHandler.Stats()
+		if err != nil {
+			return EnvStats{}, err
+		}
+	}
+	return stats, nil
+}
+
 // RegisterOnDiskSlow configures the Env to call the provided function when a
 // disk operation is slow.
 func (e *Env) RegisterOnDiskSlow(fn func(vfs.DiskSlowInfo)) {
@@ -227,10 +241,7 @@ func (e *Env) RegisterOnDiskSlow(fn func(vfs.DiskSlowInfo)) {
 func (e *Env) Close() error {
 	var err error
 	if e.Encryption != nil {
-		err = errors.CombineErrors(err, e.Encryption.Closer.Close())
-	}
-	if e.Registry != nil {
-		err = errors.CombineErrors(err, e.Registry.Close())
+		err = errors.Join(err, e.Encryption.Closer.Close(), e.Encryption.Registry.Close())
 	}
 	if e.DirectoryLock != nil {
 		err = errors.CombineErrors(err, e.DirectoryLock.Close())
