@@ -23,6 +23,7 @@ go_library(
         "env_sampler.go",
         "external_storage_builder.go",
         "fanout_clients.go",
+        "gmtime_r.c",
         "grpc_gateway.go",
         "grpc_server.go",
         "hot_ranges.go",
