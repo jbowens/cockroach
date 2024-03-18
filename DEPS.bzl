@@ -2233,11 +2233,9 @@ def go_deps():
         name = "com_github_datadog_zstd",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/DataDog/zstd",
-        sha256 = "e4924158bd1abf765a016d2c728fc367b32d20b86a268ef25743ba404c55e097",
-        strip_prefix = "github.com/DataDog/zstd@v1.5.6-0.20230824185856-869dae002e5e",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/DataDog/zstd/com_github_datadog_zstd-v1.5.6-0.20230824185856-869dae002e5e.zip",
-        ],
+	vcs = "git",
+	remote = "https://github.com/jbowens/zstd.git",
+	commit = "227f615c5a4423d3044a9b85b60b0f4e45ce0d15",
     )
     go_repository(
         name = "com_github_dave_dst",
