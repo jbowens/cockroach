@@ -132,6 +132,33 @@ var IngestAsFlushable = settings.RegisterBoolSetting(
 	util.ConstantWithMetamorphicTestBool(
 		"storage.ingest_as_flushable.enabled", true))
 
+const compressionAlgorithmSnappy int64 = 1
+const compressionAlgorithmZstd int64 = 2
+
+var compressionAlgorithm = settings.RegisterEnumSetting(
+	settings.SystemOnly,
+	"storage.sstable.compression_algorithm",
+	`determines the compression algorithm to use when compressing sstable data blocks;`+
+		` supported values: "snappy", "zstd"`,
+	"snappy",
+	map[int64]string{
+		compressionAlgorithmSnappy: "snappy",
+		compressionAlgorithmZstd:   "zstd",
+	},
+	settings.WithPublic,
+)
+
+func getCompressionAlgorithm(sv *settings.Values) pebble.Compression {
+	switch compressionAlgorithm.Get(sv) {
+	case compressionAlgorithmSnappy:
+		return pebble.SnappyCompression
+	case compressionAlgorithmZstd:
+		return pebble.ZstdCompression
+	default:
+		return pebble.DefaultCompression
+	}
+}
+
 // DO NOT set storage.single_delete.crash_on_invariant_violation.enabled or
 // storage.single_delete.crash_on_ineffectual.enabled to true.
 //
@@ -1025,6 +1052,9 @@ func newPebble(ctx context.Context, cfg PebbleConfig) (p *Pebble, err error) {
 	}
 	opts.FS = cfg.Env
 	opts.Lock = cfg.Env.DirectoryLock
+	for _, l := range opts.Levels {
+		l.Compression = getCompressionAlgorithm(&cfg.Settings.SV)
+	}
 	opts.EnsureDefaults()
 
 	// The context dance here is done so that we have a clean context without
