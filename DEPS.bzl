@@ -1693,11 +1693,9 @@ def go_deps():
         patches = [
             "@com_github_cockroachdb_cockroach//build/patches:com_github_cockroachdb_pebble.patch",
         ],
-        sha256 = "aeb6a2b9bf0c178665ca2041ccc634728eaccfc264737d3c5fd863c0ea5a4376",
-        strip_prefix = "github.com/cockroachdb/pebble@v0.0.0-20240318164948-c109764a96e7",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/pebble/com_github_cockroachdb_pebble-v0.0.0-20240318164948-c109764a96e7.zip",
-        ],
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:+dP/yhr6wA9x234UthkF6mUsmW4ErehGsN3kIJycXqE=",
+        version = "v0.0.0-20240318164948-c109764a96e7",
     )
     go_repository(
         name = "com_github_cockroachdb_redact",
@@ -2233,11 +2231,13 @@ def go_deps():
         name = "com_github_datadog_zstd",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/DataDog/zstd",
-        sha256 = "00989c1f3f3426aa6ed41f641193ff6a0d81031ba0b7fd81250e7e923d2f18a4",
-        strip_prefix = "github.com/DataDog/zstd@v1.5.0",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/DataDog/zstd/com_github_datadog_zstd-v1.5.0.zip",
+        patch_args = ["-p1"],
+        patches = [
+            "@com_github_cockroachdb_cockroach//build/patches:com_github_datadog_zstd.patch",
         ],
+        # TODO: mirror this repo (to fix, run `./dev generate bazel --mirror`)
+        sum = "h1:ZIWapoIRN1VqT8GR8jAwb1Ie9GyehWjVcGh32Y2MznE=",
+        version = "v1.5.6-0.20230824185856-869dae002e5e",
     )
     go_repository(
         name = "com_github_dave_dst",
