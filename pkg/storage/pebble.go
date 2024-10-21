@@ -1969,7 +1969,17 @@ func (p *Pebble) put(key MVCCKey, value []byte) error {
 	if len(key.Key) == 0 {
 		return emptyKeyError()
 	}
-	return p.db.Set(EncodeMVCCKey(key), value, pebble.Sync)
+	n := encodedMVCCKeyLength(key)
+	b := p.db.NewBatch()
+	o := b.SetDeferred(n, len(value))
+	encodeMVCCKeyToBuf(o.Key, key, n)
+	copy(o.Value, value)
+	_ = o.Finish()
+	if err := p.db.Apply(b, pebble.Sync); err != nil {
+		return err
+	}
+	// Only release the batch on success.
+	return b.Close()
 }
 
 // PutEngineRangeKey implements the Engine interface.
