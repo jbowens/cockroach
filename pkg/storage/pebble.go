@@ -421,15 +421,13 @@ var (
 		settings.SystemVisible,
 		"storage.value_separation.enabled",
 		"whether or not values may be separated into blob files",
-		metamorphic.ConstantWithTestBool(
-			"storage.value_separation.enabled", true /* defaultValue */),
+		true,
 	)
 	valueSeparationMinimumSize = settings.RegisterIntSetting(
 		settings.SystemVisible,
 		"storage.value_separation.minimum_size",
 		"the minimum size of a value that will be separated into a blob file",
-		int64(metamorphic.ConstantWithTestRange("storage.value_separation.minimum_size",
-			1<<10 /* 1 KiB (default) */, 25 /* 25 bytes (minimum) */, 1<<20 /* 1 MiB (maximum) */)),
+		10,
 		settings.IntWithMinimum(1),
 	)
 	valueSeparationMaxReferenceDepth = settings.RegisterIntSetting(
@@ -437,14 +435,14 @@ var (
 		"storage.value_separation.max_reference_depth",
 		"the max reference depth bounds the number of unique, overlapping blob files referenced within a sstable;"+
 			" lower values improve scan performance but increase write amplification",
-		int64(metamorphic.ConstantWithTestRange("storage.value_separation.max_reference_depth", 10 /* default */, 2, 20)),
+		3,
 		settings.IntWithMinimum(2),
 	)
 	valueSeparationRewriteMinimumAge = settings.RegisterDurationSetting(
 		settings.SystemVisible,
 		"storage.value_separation.rewrite_minimum_age",
 		"the minimum age of a blob file before it is eligible for a rewrite compaction",
-		5*time.Minute,
+		time.Hour,
 		settings.DurationWithMinimum(0),
 	)
 	valueSeparationCompactionGarbageThreshold = settings.RegisterIntSetting(
@@ -452,9 +450,7 @@ var (
 		"storage.value_separation.compaction_garbage_threshold",
 		"the max garbage threshold configures the percentage of unreferenced value "+
 			"bytes that trigger blob-file rewrite compactions; 100 disables these compactions",
-		int64(metamorphic.ConstantWithTestRange("storage.value_separation.compaction_garbage_threshold",
-			10, /* default */
-			1 /* min */, 80 /* max */)),
+		100,
 		settings.IntInRange(1, 100),
 	)
 )
