@@ -657,7 +657,7 @@ go_download_sdk(
     # if the kernel is in FIPS mode but OpenSSL cannot be loaded. We do not currently use this experiment
     # because A) we also want to detect the case when the kernel is not in FIPS mode and B) we want to be
     # able to provide additional diagnostic information such as the expected version of OpenSSL.
-    experiments = ["boringcrypto"],
+    experiments = ["boringcrypto", "cgocheck2"],
     sdks = {
         "linux_amd64": ("go1.23.7fips.linux-amd64.tar.gz", "b8e942eb06ec19db5e2ee8fa276b0df8a9a9bd97b081d349f331c8f06f27cb55"),
     },
