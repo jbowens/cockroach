@@ -6,10 +6,13 @@
 package tests
 
 import (
+	"bytes"
 	"context"
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -26,8 +29,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
+	"github.com/codahale/hdrhistogram"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/perf/benchfmt"
 )
 
 func registerKV(r registry.Registry) {
@@ -1133,4 +1139,134 @@ func registerKVRestartImpact(r registry.Registry) {
 			m.Wait()
 		},
 	})
+}
+
+func registerKVMixed(r registry.Registry) {
+	const multiplier = 1
+	const baseInsertCount = 100_000_000
+	const baseMaxOps = 30_000_000
+	const baseBlockSize = 512
+	insertCount := baseInsertCount / multiplier
+	maxOps := baseMaxOps / multiplier
+	blockSize := baseBlockSize * multiplier
+
+	for _, enableValueSeparation := range []bool{true, false} {
+		enableValueSeparation := enableValueSeparation
+		r.Add(registry.TestSpec{
+			Name:                fmt.Sprintf("kv/mixed/blockSize=%d/valueSeparation=%t", blockSize, enableValueSeparation),
+			Owner:               registry.OwnerStorage,
+			Cluster:             r.MakeClusterSpec(4, spec.WorkloadNode()),
+			CompatibleClouds:    registry.AllExceptAWS,
+			Suites:              registry.Suites(registry.Weekly),
+			Leases:              registry.DefaultLeases,
+			SkipPostValidations: registry.PostValidationNoDeadNodes,
+			Timeout:             6 * time.Hour,
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				settings := install.MakeClusterSettings(install.ClusterSettingsOption{
+					"sql.stats.automatic_collection.enabled": "false",
+				})
+				c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), settings, c.CRDBNodes())
+
+				db := c.Conn(ctx, t.L(), 1)
+				defer db.Close()
+
+				err := roachtestutil.WaitFor3XReplication(ctx, t.L(), db)
+				require.NoError(t, err)
+
+				_, err = db.ExecContext(ctx, fmt.Sprintf("SET CLUSTER SETTING storage.value_separation.enabled = '%t'", enableValueSeparation))
+				require.NoError(t, err)
+				_, err = db.ExecContext(ctx, "SET CLUSTER SETTING storage.value_separation.minimum_size = 64")
+				require.NoError(t, err)
+
+				t.L().Printf("insertCount: %d, maxOps: %d, blockSize: %d", insertCount, maxOps, blockSize)
+				insertCountFlag := fmt.Sprintf("--insert-count=%d", insertCount)
+				blockSizeFlag := fmt.Sprintf("--min-block-bytes=%d --max-block-bytes=%d", blockSize, blockSize)
+				writeSeqFlag := fmt.Sprintf("--write-seq=R%d", insertCount)
+
+				err = os.MkdirAll(t.ArtifactsDir(), 0755)
+				require.NoError(t, err)
+
+				// Initialize the database with data.
+				c.Run(ctx, option.WithNodes(c.WorkloadNode()), "./cockroach workload init kv --splits 100 --seed 1 "+insertCountFlag+" "+blockSizeFlag+" --concurrency 24 {pgurl:1-3}")
+
+				time.Sleep(30 * time.Second)
+
+				// Run the kv95 workload.
+				t.Status("running kv95 workload")
+				kv95Cmd := fmt.Sprintf("./cockroach workload run kv --seed 1 --max-ops=%d %s %s --read-percent=95 --concurrency=24 --histograms=%s/kv95.json {pgurl:1-3}",
+					maxOps, writeSeqFlag, blockSizeFlag, t.PerfArtifactsDir())
+				c.Run(ctx, option.WithNodes(c.WorkloadNode()), kv95Cmd)
+				c.Get(ctx, t.L(), filepath.Join(t.PerfArtifactsDir(), "kv95.json"), filepath.Join(t.ArtifactsDir(), "kv95.json"), c.WorkloadNode())
+
+				time.Sleep(30 * time.Second)
+
+				// Run the kv50 workload.
+				t.Status("running kv50 workload")
+				kv50Cmd := fmt.Sprintf("./cockroach workload run kv --seed 1 --max-ops=%d %s %s --read-percent=50 --concurrency=24 --histograms=%s/kv50.json {pgurl:1-3}",
+					maxOps, writeSeqFlag, blockSizeFlag, t.PerfArtifactsDir())
+				c.Run(ctx, option.WithNodes(c.WorkloadNode()), kv50Cmd)
+				c.Get(ctx, t.L(), filepath.Join(t.PerfArtifactsDir(), "kv50.json"), filepath.Join(t.ArtifactsDir(), "kv50.json"), c.WorkloadNode())
+
+				time.Sleep(30 * time.Second)
+
+				// Run the kv0 workload.
+				t.Status("running kv0 workload")
+				kv0Cmd := fmt.Sprintf("./cockroach workload run kv --seed 1 --max-ops=%d %s %s --read-percent=0 --concurrency=24 --histograms=%s/kv0.json {pgurl:1-3}",
+					maxOps, writeSeqFlag, blockSizeFlag, t.PerfArtifactsDir())
+				c.Run(ctx, option.WithNodes(c.WorkloadNode()), kv0Cmd)
+				c.Get(ctx, t.L(), filepath.Join(t.PerfArtifactsDir(), "kv0.json"), filepath.Join(t.ArtifactsDir(), "kv0.json"), c.WorkloadNode())
+
+				// Decode the downloaded histograms and write Go benchmark data.
+				var buf bytes.Buffer
+				for _, variant := range []string{"kv95", "kv50", "kv0"} {
+					snapshots, err := histogram.DecodeSnapshots(filepath.Join(t.ArtifactsDir(), fmt.Sprintf("%s.json", variant)))
+					require.NoError(t, err)
+					var start time.Time
+					var end time.Time
+					histograms := make(map[string]*hdrhistogram.Histogram, len(snapshots))
+					for n, snaps := range snapshots {
+						var cur *hdrhistogram.Histogram
+						for _, s := range snaps {
+							h := hdrhistogram.Import(s.Hist)
+							if cur == nil {
+								cur = h
+							} else {
+								cur.Merge(h)
+							}
+							if start.IsZero() || s.Now.Before(start) {
+								start = s.Now
+							}
+							if sEnd := s.Now.Add(s.Elapsed); end.IsZero() || sEnd.After(end) {
+								end = sEnd
+							}
+						}
+						histograms[n] = cur
+					}
+					dur := end.Sub(start)
+
+					bw := benchfmt.NewWriter(&buf)
+					for opType, hist := range histograms {
+						count := hist.TotalCount()
+						bw.Write(&benchfmt.Result{
+							Name:  benchfmt.Name(fmt.Sprintf("BenchmarkKVMixed/%s/%s/throughput", variant, opType)),
+							Iters: 1,
+							Values: []benchfmt.Value{
+								{Value: float64(count) / dur.Seconds(), Unit: "ops/sec"},
+							},
+						})
+						for _, quantile := range []int{50, 90, 95, 99, 100} {
+							bw.Write(&benchfmt.Result{
+								Name:  benchfmt.Name(fmt.Sprintf("BenchmarkKVMixed/%s/%s/p%d", variant, opType, quantile)),
+								Iters: int(count),
+								Values: []benchfmt.Value{
+									{Value: float64(hist.ValueAtQuantile(float64(quantile))) / 1e6, Unit: "ms"},
+								},
+							})
+						}
+					}
+				}
+				t.L().Printf("Benchmark summary:\n%s", buf.String())
+			},
+		})
+	}
 }

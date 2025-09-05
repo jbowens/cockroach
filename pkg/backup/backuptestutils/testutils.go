@@ -162,7 +162,7 @@ func StartBackupRestoreTestCluster(
 		sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.index_buffer_size = '16MiB'`)
 
 		sqlDB.Exec(t, `CREATE DATABASE data`)
-		l := workloadsql.InsertsDataLoader{BatchSize: 1000, Concurrency: 4}
+		l := workloadsql.InsertsDataLoader{BatchSize: 250, Concurrency: 4}
 		if _, err := workloadsql.Setup(ctx, sqlDB.DB.(*gosql.DB), bankData, l); err != nil {
 			t.Fatal(err)
 		}

@@ -39,7 +39,7 @@ func (l InsertsDataLoader) InitialDataLoad(
 	}
 
 	if l.BatchSize <= 0 {
-		l.BatchSize = 1000
+		l.BatchSize = 250
 	}
 	if l.Concurrency < 1 {
 		l.Concurrency = 1
